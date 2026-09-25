@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"/c/Users/DELL/Downloads/super-demo/superset/\" 2>&1)",
+      "Read(//c/Users/DELL/Downloads/super-demo/superset//**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8088/health)",
+      "Read(//c/Users/DELL/Downloads/super-demo/superset/**)",
+      "Bash(docker exec *)"
+    ]
+  }
+}
