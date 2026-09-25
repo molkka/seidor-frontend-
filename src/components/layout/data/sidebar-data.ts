@@ -1,186 +1,101 @@
 import {
-  Construction,
   LayoutDashboard,
-  Monitor,
-  Bug,
-  ListTodo,
-  FileX,
-  HelpCircle,
-  Lock,
+  BarChart3,
   Bell,
-  Package,
+  Globe,
+  Info,
   Palette,
-  ServerOff,
   Settings,
-  Wrench,
+  Shield,
   UserCog,
-  UserX,
   Users,
-  MessagesSquare,
-  ShieldCheck,
-  AudioWaveform,
-  Command,
-  GalleryVerticalEnd,
+  CalendarDays,
+  FolderKanban,
+  Bot,
+  Timer,
+  HelpCircle,
 } from 'lucide-react'
-import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: 'satnaing',
-    email: 'satnaingdev@gmail.com',
-    avatar: '/avatars/shadcn.jpg',
+    name: 'SEIDOR User',
+    email: 'user@seidor.com',
+    avatar: '/images/seidorCapture.PNG',
   },
-  teams: [
-    {
-      name: 'Shadcn Admin',
-      logo: Command,
-      plan: 'Vite + ShadcnUI',
-    },
-    {
-      name: 'Acme Inc',
-      logo: GalleryVerticalEnd,
-      plan: 'Enterprise',
-    },
-    {
-      name: 'Acme Corp.',
-      logo: AudioWaveform,
-      plan: 'Startup',
-    },
-  ],
+  teams: [],
   navGroups: [
     {
-      title: 'General',
+      title: 'Planning SAP Africa',
       items: [
         {
           title: 'Dashboard',
-          url: '/',
+          url: '/dashboard',
           icon: LayoutDashboard,
         },
         {
-          title: 'Tasks',
-          url: '/tasks',
-          icon: ListTodo,
+          title: 'Analytics',
+          url: '/analytics',
+          icon: BarChart3,
         },
         {
-          title: 'Apps',
-          url: '/apps',
-          icon: Package,
+          title: 'Planification',
+          url: '/planning',
+          icon: CalendarDays,
         },
         {
-          title: 'Chats',
-          url: '/chats',
-          badge: '3',
-          icon: MessagesSquare,
-        },
-        {
-          title: 'Users',
-          url: '/users',
+          title: 'Consultants',
+          url: '/consultants',
           icon: Users,
         },
         {
-          title: 'Secured by Clerk',
-          icon: ClerkLogo,
-          items: [
-            {
-              title: 'Sign In',
-              url: '/clerk/sign-in',
-            },
-            {
-              title: 'Sign Up',
-              url: '/clerk/sign-up',
-            },
-            {
-              title: 'User Management',
-              url: '/clerk/user-management',
-            },
-          ],
+          title: 'Projets',
+          url: '/projets',
+          icon: FolderKanban,
+        },
+        {
+          title: 'Chatbot IA',
+          url: '/chatbot',
+          icon: Bot,
+        },
+        {
+          title: 'Calendrier',
+          url: '/imputation',
+          icon: Timer,
         },
       ],
     },
     {
-      title: 'Pages',
+      title: 'Paramètres',
       items: [
         {
-          title: 'Auth',
-          icon: ShieldCheck,
-          items: [
-            {
-              title: 'Sign In',
-              url: '/sign-in',
-            },
-            {
-              title: 'Sign In (2 Col)',
-              url: '/sign-in-2',
-            },
-            {
-              title: 'Sign Up',
-              url: '/sign-up',
-            },
-            {
-              title: 'Forgot Password',
-              url: '/forgot-password',
-            },
-            {
-              title: 'OTP',
-              url: '/otp',
-            },
-          ],
-        },
-        {
-          title: 'Errors',
-          icon: Bug,
-          items: [
-            {
-              title: 'Unauthorized',
-              url: '/errors/unauthorized',
-              icon: Lock,
-            },
-            {
-              title: 'Forbidden',
-              url: '/errors/forbidden',
-              icon: UserX,
-            },
-            {
-              title: 'Not Found',
-              url: '/errors/not-found',
-              icon: FileX,
-            },
-            {
-              title: 'Internal Server Error',
-              url: '/errors/internal-server-error',
-              icon: ServerOff,
-            },
-            {
-              title: 'Maintenance Error',
-              url: '/errors/maintenance-error',
-              icon: Construction,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Other',
-      items: [
-        {
-          title: 'Settings',
+          title: 'Paramètres',
           icon: Settings,
           items: [
             {
-              title: 'Profile',
+              title: 'Profil',
               url: '/settings',
               icon: UserCog,
             },
             {
-              title: 'Account',
-              url: '/settings/account',
-              icon: Wrench,
+              title: 'Utilisateurs',
+              url: '/settings/users',
+              icon: Users,
             },
             {
-              title: 'Appearance',
+              title: 'Sécurité',
+              url: '/settings/account',
+              icon: Shield,
+            },
+            {
+              title: 'Apparence',
               url: '/settings/appearance',
               icon: Palette,
+            },
+            {
+              title: 'Langue',
+              url: '/settings/language',
+              icon: Globe,
             },
             {
               title: 'Notifications',
@@ -188,14 +103,14 @@ export const sidebarData: SidebarData = {
               icon: Bell,
             },
             {
-              title: 'Display',
-              url: '/settings/display',
-              icon: Monitor,
+              title: 'À propos',
+              url: '/settings/about',
+              icon: Info,
             },
           ],
         },
         {
-          title: 'Help Center',
+          title: 'Centre d\'aide',
           url: '/help-center',
           icon: HelpCircle,
         },

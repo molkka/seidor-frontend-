@@ -4,24 +4,46 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
   SidebarRail,
 } from '@/components/ui/sidebar'
-// import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
-import { TeamSwitcher } from './team-switcher'
 
+// ── SEIDOR brand logo ──────────────────────────────────────
+function SeidorBrand() {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton size='lg' className='pointer-events-none select-none'>
+          {/* Real SEIDOR logo */}
+          <img
+            src='/images/seidorCapture.PNG'
+            alt='SEIDOR'
+            className='h-8 w-auto object-contain shrink-0'
+          />
+          {/* Subtitle — hidden when sidebar is collapsed */}
+          <div className='grid flex-1 text-start text-sm leading-tight'>
+            <span className='truncate text-xs text-muted-foreground font-medium'>
+              Planning SAP Africa
+            </span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
+// ── Sidebar ────────────────────────────────────────────────
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
-
-        {/* Replace <TeamSwitch /> with the following <AppTitle />
-         /* if you want to use the normal app title instead of TeamSwitch dropdown */}
-        {/* <AppTitle /> */}
+        <SeidorBrand />
       </SidebarHeader>
       <SidebarContent>
         {sidebarData.navGroups.map((props) => (
