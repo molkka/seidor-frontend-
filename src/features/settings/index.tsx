@@ -1,74 +1,83 @@
 import { Outlet } from '@tanstack/react-router'
-import { Monitor, Bell, Palette, Wrench, UserCog } from 'lucide-react'
+import {
+  Bell,
+  Globe,
+  Info,
+  Palette,
+  Shield,
+  UserCog,
+  Users,
+} from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
+import { useAuthStore } from '@/store/authStore'
+import { useT } from '@/hooks/useT'
 import { SidebarNav } from './components/sidebar-nav'
 
-const sidebarNavItems = [
-  {
-    title: 'Profile',
-    href: '/settings',
-    icon: <UserCog size={18} />,
-  },
-  {
-    title: 'Account',
-    href: '/settings/account',
-    icon: <Wrench size={18} />,
-  },
-  {
-    title: 'Appearance',
-    href: '/settings/appearance',
-    icon: <Palette size={18} />,
-  },
-  {
-    title: 'Notifications',
-    href: '/settings/notifications',
-    icon: <Bell size={18} />,
-  },
-  {
-    title: 'Display',
-    href: '/settings/display',
-    icon: <Monitor size={18} />,
-  },
-]
-
 export function Settings() {
-  return (
-    <>
-      {/* ===== Top Heading ===== */}
-      <Header>
-        <Search />
-        <div className='ms-auto flex items-center space-x-4'>
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
+  const t = useT().settings
+  const role = useAuthStore((s) => s.user?.role)
 
-      <Main fixed>
-        <div className='space-y-0.5'>
-          <h1 className='text-2xl font-bold tracking-tight md:text-3xl'>
-            Settings
-          </h1>
-          <p className='text-muted-foreground'>
-            Manage your account settings and set e-mail preferences.
-          </p>
+  const sidebarNavItems = [
+    {
+      title: t.profile.nav,
+      href: '/settings',
+      icon: <UserCog size={18} />,
+    },
+    ...(role === 'ADMIN'
+      ? [
+          {
+            title: t.users.nav,
+            href: '/settings/users',
+            icon: <Users size={18} />,
+          },
+        ]
+      : []),
+    {
+      title: t.security.nav,
+      href: '/settings/account',
+      icon: <Shield size={18} />,
+    },
+    {
+      title: t.appearance.nav,
+      href: '/settings/appearance',
+      icon: <Palette size={18} />,
+    },
+    {
+      title: t.language.nav,
+      href: '/settings/language',
+      icon: <Globe size={18} />,
+    },
+    {
+      title: t.notifications.nav,
+      href: '/settings/notifications',
+      icon: <Bell size={18} />,
+    },
+    {
+      title: t.about.nav,
+      href: '/settings/about',
+      icon: <Info size={18} />,
+    },
+  ]
+
+  return (
+    <div className='space-y-6'>
+      <div className='space-y-0.5'>
+        <h1 className='text-2xl font-bold tracking-tight md:text-3xl'>
+          Paramètres
+        </h1>
+        <p className='text-muted-foreground'>
+          Gérez les paramètres de votre compte.
+        </p>
+      </div>
+      <Separator />
+      <div className='flex flex-col space-y-4 lg:flex-row lg:space-y-0 lg:space-x-12'>
+        <aside className='lg:w-1/5'>
+          <SidebarNav items={sidebarNavItems} />
+        </aside>
+        <div className='flex min-h-0 flex-1 flex-col'>
+          <Outlet />
         </div>
-        <Separator className='my-4 lg:my-6' />
-        <div className='flex flex-1 flex-col space-y-2 overflow-hidden md:space-y-2 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          <aside className='top-0 lg:sticky lg:w-1/5'>
-            <SidebarNav items={sidebarNavItems} />
-          </aside>
-          <div className='flex w-full overflow-y-hidden p-1'>
-            <Outlet />
-          </div>
-        </div>
-      </Main>
-    </>
+      </div>
+    </div>
   )
 }

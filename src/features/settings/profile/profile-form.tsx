@@ -1,177 +1,228 @@
-import { z } from 'zod'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
-import { showSubmittedData } from '@/lib/show-submitted-data'
-import { cn } from '@/lib/utils'
+import { z } from 'zod'
+import { toast } from 'sonner'
+import { Loader2, ShieldCheck } from 'lucide-react'
+import { api } from '@/services/api'
+import { useAuthStore } from '@/store/authStore'
+import { useT } from '@/hooks/useT'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 
-const profileFormSchema = z.object({
-  username: z
-    .string('Please enter your username.')
-    .min(2, 'Username must be at least 2 characters.')
-    .max(30, 'Username must not be longer than 30 characters.'),
-  email: z.email({
-    error: (iss) =>
-      iss.input === undefined
-        ? 'Please select an email to display.'
-        : undefined,
-  }),
-  bio: z.string().max(160).min(4),
-  urls: z
-    .array(
-      z.object({
-        value: z.url('Please enter a valid URL.'),
-      })
-    )
-    .optional(),
+const profileSchema = z.object({
+  nom: z.string().min(2, { message: 'Minimum 2 caractères.' }),
+  email: z.email({ error: 'Email invalide.' }),
 })
 
-type ProfileFormValues = z.infer<typeof profileFormSchema>
+const passwordSchema = z
+  .object({
+    old_password: z.string().min(1, { message: 'Requis.' }),
+    new_password: z.string().min(8, { message: 'Minimum 8 caractères.' }),
+    confirm: z.string().min(1, { message: 'Requis.' }),
+  })
+  .refine((d) => d.new_password === d.confirm, {
+    message: 'Les mots de passe ne correspondent pas.',
+    path: ['confirm'],
+  })
 
-// This can come from your database or API.
-const defaultValues: Partial<ProfileFormValues> = {
-  bio: 'I own a computer.',
-  urls: [
-    { value: 'https://shadcn.com' },
-    { value: 'http://twitter.com/shadcn' },
-  ],
+type ProfileValues = z.infer<typeof profileSchema>
+type PasswordValues = z.infer<typeof passwordSchema>
+
+const ROLE_COLORS: Record<string, string> = {
+  ADMIN: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  MANAGER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  CONSULTANT: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }
 
 export function ProfileForm() {
-  const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileFormSchema),
-    defaultValues,
-    mode: 'onChange',
+  const t = useT().settings.profile
+  const { user, updateUser } = useAuthStore()
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+
+  const profileForm = useForm<ProfileValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: { nom: user?.nom ?? '', email: user?.email ?? '' },
   })
 
-  const { fields, append } = useFieldArray({
-    name: 'urls',
-    control: form.control,
+  const passwordForm = useForm<PasswordValues>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { old_password: '', new_password: '', confirm: '' },
   })
+
+  async function onSaveProfile(values: ProfileValues) {
+    setSavingProfile(true)
+    try {
+      const { data } = await api.put('/auth/me', {
+        nom: values.nom,
+        email: values.email,
+      })
+      updateUser({ nom: data.nom, email: data.email })
+      toast.success(t.saved)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? 'Erreur lors de la mise à jour.'
+      toast.error(msg)
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function onChangePassword(values: PasswordValues) {
+    setSavingPassword(true)
+    try {
+      await api.put('/auth/me', {
+        old_password: values.old_password,
+        new_password: values.new_password,
+      })
+      toast.success(t.passwordUpdated)
+      passwordForm.reset()
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? 'Erreur lors du changement de mot de passe.'
+      toast.error(msg)
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  if (!user) return null
 
   return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit((data) => showSubmittedData(data))}
-        className='space-y-8'
-      >
-        <FormField
-          control={form.control}
-          name='username'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input placeholder='shadcn' {...field} />
-              </FormControl>
-              <FormDescription>
-                This is your public display name. It can be your real name or a
-                pseudonym. You can only change this once every 30 days.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='email'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+    <div className='space-y-8'>
+      {/* ── Identité ── */}
+      <Form {...profileForm}>
+        <form
+          onSubmit={profileForm.handleSubmit(onSaveProfile)}
+          className='space-y-4'
+        >
+          <FormField
+            control={profileForm.control}
+            name='nom'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t.nom}</FormLabel>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder='Select a verified email to display' />
-                  </SelectTrigger>
+                  <Input {...field} />
                 </FormControl>
-                <SelectContent>
-                  <SelectItem value='m@example.com'>m@example.com</SelectItem>
-                  <SelectItem value='m@google.com'>m@google.com</SelectItem>
-                  <SelectItem value='m@support.com'>m@support.com</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                You can manage verified email addresses in your{' '}
-                <Link to='/'>email settings</Link>.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={profileForm.control}
+            name='email'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t.email}</FormLabel>
+                <FormControl>
+                  <Input type='email' {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Rôle (lecture seule) */}
+          <div className='space-y-1.5'>
+            <p className='text-sm font-medium leading-none'>{t.role}</p>
+            <Badge
+              variant='secondary'
+              className={ROLE_COLORS[user.role] ?? ''}
+            >
+              {user.role}
+            </Badge>
+          </div>
+
+          {/* Google lié */}
+          {user.a_google && (
+            <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+              <ShieldCheck size={15} className='text-green-500' />
+              {t.googleLinked}
+            </div>
           )}
-        />
-        <FormField
-          control={form.control}
-          name='bio'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bio</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder='Tell us a little bit about yourself'
-                  className='resize-none'
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                You can <span>@mention</span> other users and organizations to
-                link to them.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div>
-          {fields.map((field, index) => (
+
+          <Button type='submit' disabled={savingProfile}>
+            {savingProfile && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+            {savingProfile ? t.saving : t.save}
+          </Button>
+        </form>
+      </Form>
+
+      <Separator />
+
+      {/* ── Mot de passe ── */}
+      <div>
+        <h4 className='mb-3 text-sm font-semibold'>{t.passwordTitle}</h4>
+        {user.a_google && (
+          <p className='mb-3 text-xs text-muted-foreground'>{t.googleOnly}</p>
+        )}
+        <Form {...passwordForm}>
+          <form
+            onSubmit={passwordForm.handleSubmit(onChangePassword)}
+            className='space-y-4'
+          >
             <FormField
-              control={form.control}
-              key={field.id}
-              name={`urls.${index}.value`}
+              control={passwordForm.control}
+              name='old_password'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className={cn(index !== 0 && 'sr-only')}>
-                    URLs
-                  </FormLabel>
-                  <FormDescription className={cn(index !== 0 && 'sr-only')}>
-                    Add links to your website, blog, or social media profiles.
-                  </FormDescription>
-                  <FormControl className={cn(index !== 0 && 'mt-1.5')}>
-                    <Input {...field} />
+                  <FormLabel>{t.oldPassword}</FormLabel>
+                  <FormControl>
+                    <Input type='password' autoComplete='current-password' {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          ))}
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='mt-2'
-            onClick={() => append({ value: '' })}
-          >
-            Add URL
-          </Button>
-        </div>
-        <Button type='submit'>Update profile</Button>
-      </form>
-    </Form>
+            <FormField
+              control={passwordForm.control}
+              name='new_password'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t.newPassword}</FormLabel>
+                  <FormControl>
+                    <Input type='password' autoComplete='new-password' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={passwordForm.control}
+              name='confirm'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t.confirmPassword}</FormLabel>
+                  <FormControl>
+                    <Input type='password' autoComplete='new-password' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type='submit' variant='outline' disabled={savingPassword}>
+              {savingPassword && (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              )}
+              {t.updatePassword}
+            </Button>
+          </form>
+        </Form>
+      </div>
+    </div>
   )
 }
