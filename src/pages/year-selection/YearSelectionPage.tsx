@@ -193,8 +193,16 @@ export default function YearSelectionPage() {
         style={{
           flex: 1, background: S.bg,
           display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
+          alignItems: 'center',
+          // `safe center` plutot que `center` : quand le contenu depasse la hauteur
+          // disponible, un centrage classique deborde des DEUX cotes et le haut devient
+          // inatteignable au defilement. `safe` bascule alors sur un alignement en debut
+          // de boite, ce qui garde tout le contenu accessible.
+          justifyContent: 'safe center',
           padding: '40px 48px', gap: 0,
+          // La racine est en position:fixed/inset:0, donc sa hauteur est exactement celle
+          // de la fenetre : sans defilement, tout ce qui depasse est perdu.
+          overflowY: 'auto',
         }}
       >
         {/* Step label */}
@@ -230,6 +238,12 @@ export default function YearSelectionPage() {
           display: 'flex', alignItems: 'center', gap: 0,
           overflow: 'hidden',
           marginBottom: 16,
+          // Sans ceci, le tambour est ecrase. Un element flex vaut `flex-shrink: 1` par
+          // defaut : des que le contenu de la colonne depasse la hauteur de la fenetre,
+          // flexbox reduit le plus grand element, ici le rouleau. Combine a son
+          // `overflow: hidden`, cela tronquait les chiffres de l'annee en une bande de
+          // quelques pixels au lieu de les reduire proprement.
+          flexShrink: 0,
         }}>
           {/* Up button */}
           <button
@@ -253,7 +267,15 @@ export default function YearSelectionPage() {
           {/* Drum cylinder */}
           <div
             style={{
-              flex: 1, height: 320, position: 'relative',
+              flex: 1,
+              // Hauteur adaptative plutot que 320 px fixes : sur un ecran de portable
+              // 720 px de haut, 320 px de tambour plus le titre, les puces d'annee, le
+              // bouton et les raccourcis depassaient la fenetre. Le plancher de 220 px
+              // reste superieur aux 100 px du chiffre central plus sa marge, donc l'annee
+              // selectionnee n'est jamais tronquee ; seules les annees a +/-2, affichees
+              // a 10 % d'opacite et deja couvertes par le degrade, sortent du cadre.
+              height: 'clamp(220px, 34vh, 320px)',
+              position: 'relative',
               cursor: 'grab', userSelect: 'none', overflow: 'hidden',
             }}
             onWheel={onWheel}
