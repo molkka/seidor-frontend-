@@ -1,119 +1,83 @@
-# Shadcn Admin Dashboard
+﻿# Seidor Planning — Frontend
 
-Admin Dashboard UI crafted with Shadcn and Vite. Built with responsiveness and accessibility in mind.
+React and TypeScript frontend for Seidor's SAP consultant and project planning application.
 
-![alt text](public/images/shadcn-admin.png)
-
-[![Sponsored by Clerk](https://img.shields.io/badge/Sponsored%20by-Clerk-5b6ee1?logo=clerk)](https://go.clerk.com/GttUAaK)
-
-I've been creating dashboard UIs at work and for my personal projects. I always wanted to make a reusable collection of dashboard UI for future projects; and here it is now. While I've created a few custom components, some of the code is directly adapted from ShadcnUI examples.
-
-> This is not a starter project (template) though. I'll probably make one in the future.
+[Frontend repository](https://github.com/molkka/seidor-frontend-) · [Backend repository](https://github.com/molkka/seidor-backend-)
 
 ## Features
 
-- Light/dark mode
-- Responsive
-- Accessible
-- With built-in Sidebar component
-- Global search command
-- 10+ pages
-- Extra custom components
-- RTL support
+- Authentication, registration, email verification, and password reset.
+- Consultant and project management.
+- Annual planning, scenario optimization, and navigation between planning years.
+- Effort estimation and time allocation tracking.
+- Dashboards and analytics, including embedded Apache Superset dashboards.
+- Planning email workflows and an assistant chatbot.
 
-<details>
-<summary>Customized Components (click to expand)</summary>
+Some features require corresponding backend services and configuration.
 
-This project uses Shadcn UI components, but some have been slightly modified for better RTL (Right-to-Left) support and other improvements. These customized components differ from the original Shadcn UI versions.
+## Technology
 
-If you want to update components using the Shadcn CLI (e.g., `npx shadcn@latest add <component>`), it's generally safe for non-customized components. For the listed customized ones, you may need to manually merge changes to preserve the project's modifications and avoid overwriting RTL support or other updates.
+React 19, TypeScript, Vite 8, Tailwind CSS 4, Shadcn UI / Radix UI, TanStack Router and Query, Zustand, Axios, and Recharts.
 
-> If you don't require RTL support, you can safely update the 'RTL Updated Components' via the Shadcn CLI, as these changes are primarily for RTL compatibility. The 'Modified Components' may have other customizations to consider.
+## Local setup
 
-### Modified Components
-
-- scroll-area
-- sonner
-- separator
-
-### RTL Updated Components
-
-- alert-dialog
-- calendar
-- command
-- dialog
-- dropdown-menu
-- select
-- table
-- sheet
-- sidebar
-- switch
-
-**Notes:**
-
-- **Modified Components**: These have general updates, potentially including RTL adjustments.
-- **RTL Updated Components**: These have specific changes for RTL language support (e.g., layout, positioning).
-- For implementation details, check the source files in `src/components/ui/`.
-- All other Shadcn UI components in the project are standard and can be safely updated via the CLI.
-
-</details>
-
-## Tech Stack
-
-**UI:** [ShadcnUI](https://ui.shadcn.com) (TailwindCSS + RadixUI)
-
-**Build Tool:** [Vite](https://vitejs.dev/)
-
-**Routing:** [TanStack Router](https://tanstack.com/router/latest)
-
-**Type Checking:** [TypeScript](https://www.typescriptlang.org/)
-
-**Linting/Formatting:** [ESLint](https://eslint.org/) & [Prettier](https://prettier.io/)
-
-**Icons:** [Lucide Icons](https://lucide.dev/icons/), [Tabler Icons](https://tabler.io/icons) (Brand icons only)
-
-**Auth (partial):** [Clerk](https://go.clerk.com/GttUAaK)
-
-## Run Locally
-
-Clone the project
+Use Node.js 22.14 or newer in the Node.js 22 release line, matching the project's CI configuration, and npm.
 
 ```bash
-  git clone https://github.com/satnaing/shadcn-admin.git
+git clone https://github.com/molkka/seidor-frontend-.git
+cd seidor-frontend-
+npm ci
 ```
 
-Go to the project directory
+Create a `.env.local` file in the project root:
+
+```dotenv
+VITE_API_URL=http://localhost:8000
+# Optional: Google sign-in client ID, matching the backend configuration.
+VITE_GOOGLE_CLIENT_ID=
+```
+
+The API URL defaults to `http://localhost:8000` if omitted. Restart Vite after changing environment variables. Variables prefixed with `VITE_` are visible in the browser; keep service credentials and API secrets in the backend configuration.
+
+Start the backend using the instructions and configuration in the [backend repository](https://github.com/molkka/seidor-backend-), then start the frontend:
 
 ```bash
-  cd shadcn-admin
+npm run dev
 ```
 
-Install dependencies
+Open the local URL printed by Vite, usually `http://localhost:5173`. The backend must allow this frontend origin through its CORS configuration.
 
-```bash
-  pnpm install
-```
+Google sign-in is optional. The inherited Clerk example routes use `VITE_CLERK_PUBLISHABLE_KEY`; this is separate from the application's backend authentication.
 
-Start the server
+## Commands
 
-```bash
-  pnpm run dev
-```
+| Command                        | Purpose                                 |
+| ------------------------------ | --------------------------------------- |
+| `npm run dev`                  | Start the development server            |
+| `npm run build`                | Check TypeScript and build into `dist/` |
+| `npm run preview`              | Preview the production build locally    |
+| `node --test tests/*.test.mjs` | Run frontend unit tests                 |
+| `npm run lint`                 | Run ESLint                              |
+| `npm run format:check`         | Check formatting                        |
 
-## Sponsoring this project ❤️
+GitHub Actions runs the unit tests and production build on pushes and pull requests.
 
-If you find this project helpful or use this in your own work, consider [sponsoring me](https://github.com/sponsors/satnaing) to support development and maintenance. You can [buy me a coffee](https://buymeacoffee.com/satnaing) as well. Don’t worry, every penny helps. Thank you! 🙏
+## Project structure
 
-For questions or sponsorship inquiries, feel free to reach out at [satnaingdev@gmail.com](mailto:satnaingdev@gmail.com).
+- `src/pages/`: Seidor application pages, including planning, consultants, projects, dashboards, authentication, and chatbot.
+- `src/routes/`: TanStack Router route definitions.
+- `src/components/`: Shared components and UI primitives.
+- `src/services/api.ts`: API client and authentication interceptors.
+- `src/store/`: Application state.
+- `tests/`: Frontend unit tests.
+- `public/`: Static assets.
 
-### Current Sponsor
+## Deployment
 
-- [Clerk](https://go.clerk.com/GttUAaK) - authentication and user management for the modern web
+Set `VITE_API_URL` to the deployed backend URL before running `npm run build`. Deploy the generated `dist/` directory to a static host, configure fallback routing to `index.html`, and allow the deployed frontend origin in the backend CORS configuration.
 
-## Author
+Superset embedding, Airflow workflows, email delivery, and chatbot provider credentials are configured on the backend.
 
-Crafted with 🤍 by [@satnaing](https://github.com/satnaing)
+## Attribution and license
 
-## License
-
-Licensed under the [MIT License](https://choosealicense.com/licenses/mit/)
+The UI is adapted from [Shadcn Admin by Sat Naing](https://github.com/satnaing/shadcn-admin). The original MIT license and copyright notice are preserved in [LICENSE](LICENSE).
