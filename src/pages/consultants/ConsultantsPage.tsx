@@ -1,3 +1,4 @@
+import { Can } from '@/components/permission'
 import { useEffect, useState } from 'react'
 import { Search, Plus, X, Pencil, Trash2 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -215,7 +216,7 @@ function ConsultantCard({ c, onEdit, onView }: {
       )}
 
       {/* ── Bouton Modifier — haut droit, visible au hover seulement ── */}
-      <button
+      <Can permission="consultant:write"><button
         onClick={e => { e.stopPropagation(); onEdit() }}
         style={{
           position: 'absolute', top: 14, right: 14, zIndex: 3,
@@ -232,7 +233,7 @@ function ConsultantCard({ c, onEdit, onView }: {
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.92)' }}
       >
         <Pencil size={11} /> Modifier
-      </button>
+      </button></Can>
 
       {/* ── État par défaut : nom + infos en bas ── */}
       <div style={{
@@ -626,7 +627,7 @@ export default function ConsultantsPage() {
             {consultants.length} consultant{consultants.length !== 1 ? 's' : ''} · {filtered.length} affiché{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <button
+        <Can permission="consultant:write"><button
           onClick={() => setShowCreate(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
@@ -641,7 +642,7 @@ export default function ConsultantsPage() {
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = S.navy }}
         >
           <Plus size={15} /> {t.addBtn}
-        </button>
+        </button></Can>
       </div>
 
       {/* ── Filters ───────────────────────────────────────────────── */}

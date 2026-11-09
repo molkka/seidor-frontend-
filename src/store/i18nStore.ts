@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-type Lang = 'fr' | 'en'
+type Lang = 'fr' | 'en' | 'ar'
 
 interface I18nState {
   lang: Lang

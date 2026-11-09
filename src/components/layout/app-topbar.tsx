@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Link, useRouterState, useNavigate } from '@tanstack/react-router'
 import { useAuthStore } from '@/store/authStore'
 import { usePlanningYearStore } from '@/store/planningYearStore'
 import { useT } from '@/hooks/useT'
 import {
   LayoutDashboard, CalendarDays, Users, FolderKanban,
-  Bot, Calendar, ChevronDown, LogOut, Settings, Building2,
+  Calendar, ChevronDown, LogOut, Settings, Building2,
 } from 'lucide-react'
 
 // ── SEIDOR design tokens ──────────────────────────────────────────────────────
@@ -25,7 +26,6 @@ const NAV_URLS = [
   { key: 'planning'    as const, url: '/planning',    icon: CalendarDays },
   { key: 'consultants' as const, url: '/consultants', icon: Users },
   { key: 'projets'     as const, url: '/projets',     icon: FolderKanban },
-  { key: 'chatbot'     as const, url: '/chatbot',     icon: Bot },
   { key: 'calendar'    as const, url: '/imputation',  icon: Calendar },
 ]
 
@@ -242,8 +242,9 @@ export function AppTopbar() {
 
   const navItems = NAV_URLS.map(item => ({ ...item, title: t.nav[item.key] }))
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    const revoked = await logout()
+    if (!revoked) toast.error(t.security.logoutUnavailable)
     navigate({ to: '/' })
   }
 

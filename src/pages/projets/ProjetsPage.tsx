@@ -1,3 +1,4 @@
+import { Can } from '@/components/permission'
 import { useEffect, useState } from 'react'
 import { Search, Plus, X, Pencil, Trash2, Users } from 'lucide-react'
 import { api } from '@/services/api'
@@ -345,11 +346,11 @@ function AssignConsultantsModal({ projet, onClose }: { projet: Projet; onClose: 
                         )}
                         <span style={{ fontSize:12, color:'#6b7280' }}>{total}h · {Math.round(total / 12 / 160 * 100)}% moy.</span>
                       </div>
-                      <button onClick={() => handleDelete(aff.id)}
+                      <Can permission="project:write"><button onClick={() => handleDelete(aff.id)}
                         title="Retirer l'affectation"
                         style={{ display:'flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:7, background:'#fef2f2', border:'1px solid #fca5a5', color:'#ef4444', cursor:'pointer', flexShrink:0 }}>
                         <X size={13}/>
-                      </button>
+                      </button></Can>
                     </div>
                   )
                 })}
@@ -625,10 +626,10 @@ function DeleteModal({ projet, onClose, onDeleted }: {
             style={{ padding:'9px 20px', borderRadius:100, fontSize:13, fontWeight:500, background:'#F5F6F8', color:'#5A6472', border:'1px solid #E0E4E8', cursor:'pointer' }}>
             Annuler
           </button>
-          <button onClick={handleDelete} disabled={loading}
+          <Can permission="project:write"><button onClick={handleDelete} disabled={loading}
             style={{ padding:'9px 22px', borderRadius:100, fontSize:13, fontWeight:700, background:'#dc2626', color:'#fff', border:'none', cursor:loading?'not-allowed':'pointer', opacity:loading?0.65:1, boxShadow:'0 4px 14px rgba(220,38,38,.25)', transition:'all .18s' }}>
             {loading ? 'Suppression...' : 'Supprimer'}
-          </button>
+          </button></Can>
         </div>
       </div>
     </div>
@@ -714,14 +715,14 @@ export default function ProjetsPage() {
             <p className="text-sm text-muted-foreground mt-0.5">{projets.length} projets · SAP Africa</p>
           </div>
         </div>
-        <button
+        <Can permission="project:write"><button
           onClick={() => setShowCreate(true)}
           style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 22px', borderRadius:100, background:'#162B6E', color:'#fff', border:'none', cursor:'pointer', fontSize:13, fontWeight:700, boxShadow:'0 4px 16px rgba(22,43,110,.25)', transition:'all .18s' }}
           onMouseEnter={e => (e.currentTarget.style.background = '#1E3A8A')}
           onMouseLeave={e => (e.currentTarget.style.background = '#162B6E')}
         >
           <Plus size={15} /> {t.addBtn}
-        </button>
+        </button></Can>
       </div>
 
       {/* Stats cards */}
@@ -823,18 +824,18 @@ export default function ProjetsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => setAssignProjet(p)}
+                      <Can permission="project:write"><button onClick={() => setAssignProjet(p)}
                         className="p-1.5 rounded hover:bg-blue-500/10 text-muted-foreground hover:text-blue-600 transition-colors" title="Gérer les consultants">
                         <Users size={14} />
-                      </button>
-                      <button onClick={() => setEditProjet(p)}
+                      </button></Can>
+                      <Can permission="project:write"><button onClick={() => setEditProjet(p)}
                         className="p-1.5 rounded hover:bg-blue-500/10 text-muted-foreground hover:text-blue-600 transition-colors" title="Modifier">
                         <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setDeleteProjet(p)}
+                      </button></Can>
+                      <Can permission="project:write"><button onClick={() => setDeleteProjet(p)}
                         className="p-1.5 rounded hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600 transition-colors" title="Supprimer">
                         <Trash2 size={14} />
-                      </button>
+                      </button></Can>
                     </div>
                   </td>
                 </tr>

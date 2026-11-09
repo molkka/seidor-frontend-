@@ -1,3 +1,4 @@
+import { Can, PermissionInput } from '@/components/permission'
 import { useState, useEffect, useCallback } from 'react'
 import {
   ChevronDown, Save, Clock,
@@ -37,12 +38,9 @@ interface JourFerie {
   is_custom: boolean
 }
 
-const MOIS_FR = [
-  'Janvier','Février','Mars','Avril','Mai','Juin',
-  'Juillet','Août','Septembre','Octobre','Novembre','Décembre',
-]
 
-const MOIS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
+
+
 
 function formatDate(iso: string | null) {
   if (!iso) return ''
@@ -156,7 +154,7 @@ function FerieRow({ ferie, onChange, onDelete }: {
       {/* Date input pour lunaires et customs */}
       {(ferie.is_lunar || ferie.is_custom) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <input
+          <PermissionInput permission="planning:write"
             type="date"
             value={ferie.date_ferie ?? ''}
             onChange={e => onChange(ferie.id, e.target.value || null, ferie.nb_jours)}
@@ -182,7 +180,7 @@ function FerieRow({ ferie, onChange, onDelete }: {
       {/* Nombre de jours */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '11px', color: '#9aa3b8', whiteSpace: 'nowrap' }}>Jours :</span>
-        <input
+        <PermissionInput permission="planning:write"
           type="number" min={0} max={10} value={ferie.nb_jours}
           onChange={e => onChange(ferie.id, ferie.date_ferie, Math.max(0, parseInt(e.target.value) ?? 0))}
           style={{
@@ -196,7 +194,7 @@ function FerieRow({ ferie, onChange, onDelete }: {
 
       {/* Supprimer (custom uniquement) */}
       {ferie.is_custom && onDelete && (
-        <button
+        <Can permission="planning:write"><button
           onClick={() => onDelete(ferie.id)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -204,7 +202,7 @@ function FerieRow({ ferie, onChange, onDelete }: {
           }}
         >
           <Trash2 size={15} />
-        </button>
+        </button></Can>
       )}
     </div>
   )
@@ -292,7 +290,7 @@ function WeekAccordion({ moisIndex, semaines, onChange }: {
                     {formatDate(s.date_debut)} – {formatDate(s.date_fin)}
                   </div>
                 </div>
-                <input
+                <PermissionInput permission="planning:write"
                   type="number" min={0} max={40} step={4}
                   value={s.heures_dispo}
                   onChange={e => {
@@ -464,7 +462,7 @@ export default function ImputationPage() {
           {/* Sélecteur d'année */}
           <YearPicker value={annee} onChange={y => { setAnnee(y); setSelectedYear(y) }} />
 
-          <button
+          <Can permission="planning:write"><button
             onClick={handleSave}
             disabled={nbDirty === 0 || saving}
             style={{
@@ -477,7 +475,7 @@ export default function ImputationPage() {
           >
             <Save size={15} />
             {saving ? tc.saving : nbDirty > 0 ? `${tc.save} (${nbDirty})` : tc.save}
-          </button>
+          </button></Can>
         </div>
       </div>
 
@@ -501,7 +499,7 @@ export default function ImputationPage() {
               <h2 style={{ fontWeight: 800, fontSize: '15px', color: '#162255', margin: 0 }}>
                 {t.holidays} {annee}
               </h2>
-              <button
+              <Can permission="planning:write"><button
                 onClick={handleCalculer}
                 disabled={calculating}
                 style={{
@@ -513,7 +511,7 @@ export default function ImputationPage() {
               >
                 <RefreshCw size={13} style={{ animation: calculating ? 'spin 1s linear infinite' : 'none' }} />
                 {calculating ? tc.loading : tc.refresh}
-              </button>
+              </button></Can>
             </div>
 
             {/* Fixes */}
@@ -553,7 +551,7 @@ export default function ImputationPage() {
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1', marginBottom: '10px' }}>
                   Nouveau jour supplémentaire
                 </div>
-                <input
+                <PermissionInput permission="planning:write"
                   type="text" placeholder="Nom du jour"
                   value={newNom} onChange={e => setNewNom(e.target.value)}
                   style={{
@@ -563,7 +561,7 @@ export default function ImputationPage() {
                   }}
                 />
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                  <input
+                  <PermissionInput permission="planning:write"
                     type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
                     style={{
                       flex: 1, padding: '7px 8px', border: '1px solid #d1d5db',
@@ -572,7 +570,7 @@ export default function ImputationPage() {
                   />
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '11px', color: '#6b7280' }}>Jours :</span>
-                    <input
+                    <PermissionInput permission="planning:write"
                       type="number" min={0} max={10} value={newNb}
                       onChange={e => setNewNb(Math.max(0, parseInt(e.target.value) ?? 0))}
                       style={{
@@ -584,14 +582,14 @@ export default function ImputationPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={handleAddCustom}
+                  <Can permission="planning:write"><button onClick={handleAddCustom}
                     style={{
                       flex: 1, background: '#162255', color: '#fff', border: 'none',
                       borderRadius: '8px', padding: '8px', cursor: 'pointer',
                       fontSize: '12px', fontWeight: 700,
                     }}>
                     {tc.add}
-                  </button>
+                  </button></Can>
                   <button onClick={() => setAddingCustom(false)}
                     style={{
                       flex: 1, background: '#f1f5f9', color: '#374151', border: 'none',
@@ -603,7 +601,7 @@ export default function ImputationPage() {
                 </div>
               </div>
             ) : (
-              <button
+              <Can permission="planning:write"><button
                 onClick={() => setAddingCustom(true)}
                 style={{
                   width: '100%', marginTop: '14px', padding: '9px',
@@ -615,7 +613,7 @@ export default function ImputationPage() {
               >
                 <Plus size={14} />
                 {t.addHoliday}
-              </button>
+              </button></Can>
             )}
           </div>
 

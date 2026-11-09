@@ -11,7 +11,6 @@ import {
   Users,
   CalendarDays,
   FolderKanban,
-  Bot,
   Timer,
   HelpCircle,
 } from 'lucide-react'
@@ -52,11 +51,6 @@ export const sidebarData: SidebarData = {
           title: 'Projets',
           url: '/projets',
           icon: FolderKanban,
-        },
-        {
-          title: 'Chatbot IA',
-          url: '/chatbot',
-          icon: Bot,
         },
         {
           title: 'Calendrier',

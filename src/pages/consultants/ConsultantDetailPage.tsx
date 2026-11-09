@@ -1,3 +1,4 @@
+import { Can, PermissionInput } from '@/components/permission'
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { ArrowLeft, Upload, CalendarDays, Award, Briefcase, MapPin, Mail, RefreshCw, Pencil, X, Trash2, ChevronDown, ChevronRight, Calendar, Star, Plus } from 'lucide-react'
@@ -6,7 +7,8 @@ import { YearPicker } from '@/components/year-picker'
 import { ModuleSelector } from '@/components/module-selector'
 import { usePlanningYearStore } from '@/store/planningYearStore'
 import { useAuthStore } from '@/store/authStore'
-import { SAP_MODULES } from '@/lib/sap-modules'
+import { EvaluationForm } from './evaluation-form'
+import evaluationStyles from './evaluation-form.module.css'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -176,13 +178,13 @@ function WeekPanel({ affectationId, annee, onSaved }: {
                     <span style={{ fontSize:10, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
                     <div style={{ display:'flex', gap:2, flexShrink:0 }}>
                       {[0,8,16,40].map(h => (
-                        <button key={h} type="button" onClick={() => updateWeek(mi, si, String(h))}
+                        <Can permission="consultant:write"><button key={h} type="button" onClick={() => updateWeek(mi, si, String(h))}
                           style={{ fontSize:9, fontWeight:600, padding:'2px 4px', borderRadius:3, border:`1px solid ${S.border}`, cursor:'pointer', background: s.heures===h ? S.navy : S.bgLight, color: s.heures===h ? '#fff' : S.dark }}>
                           {h}h
-                        </button>
+                        </button></Can>
                       ))}
                     </div>
-                    <input type="number" min={0} step={0.5} value={s.heures||''} placeholder="0"
+                    <PermissionInput permission="consultant:write" type="number" min={0} step={0.5} value={s.heures||''} placeholder="0"
                       onChange={e => updateWeek(mi, si, e.target.value)}
                       style={{ width:46, padding:'3px 6px', fontSize:12, fontWeight:600, border:`1.5px solid ${S.navy}40`, borderRadius:6, outline:'none', textAlign:'right', fontFamily:'monospace' }}
                     />
@@ -195,10 +197,10 @@ function WeekPanel({ affectationId, annee, onSaved }: {
         ))}
       </div>
       <div style={{ display:'flex', justifyContent:'flex-end', marginTop:10 }}>
-        <button onClick={handleSave} disabled={saving}
+        <Can permission="consultant:write"><button onClick={handleSave} disabled={saving}
           style={{ padding:'6px 20px', borderRadius:7, fontSize:12, fontWeight:600, background:S.navy, color:'#fff', border:'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Sauvegarde…' : 'Enregistrer les semaines'}
-        </button>
+        </button></Can>
       </div>
     </div>
   )
@@ -384,9 +386,9 @@ function ConsultantEditModal({ consultant, onClose, onSaved }: {
           <button onClick={onClose} style={{ padding: '9px 22px', borderRadius: 100, fontSize: 13, background: 'transparent', color: S.gray, border: `1px solid ${S.border}`, cursor: 'pointer' }}>
             Annuler
           </button>
-          <button onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 24px', borderRadius: 100, fontSize: 13, fontWeight: 700, background: S.navy, color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? .6 : 1 }}>
+          <Can permission="consultant:write"><button onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 24px', borderRadius: 100, fontSize: 13, fontWeight: 700, background: S.navy, color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? .6 : 1 }}>
             <Pencil size={13} /> {saving ? 'Sauvegarde…' : 'Enregistrer'}
-          </button>
+          </button></Can>
         </div>
       </div>
     </div>
@@ -435,7 +437,7 @@ function EvaluationsPanel({
 }: {
   consultantId: string
   modules: string[]
-  currentUser: { id: string; nom: string; role: string } | null
+  currentUser: { id: string; nom: string; role: string; consultant_id?: number | null; permissions?: string[] } | null
 }) {
   const [scores,      setScores]     = useState<ScoreItem[]>([])
   const [allProjets,  setAllProjets] = useState<AllProjet[]>([])
@@ -448,8 +450,9 @@ function EvaluationsPanel({
   const [commentaire, setCommentaire]= useState('')
   const [saving,      setSaving]     = useState(false)
   const [error,       setError]      = useState('')
+  const saveInFlight = useRef(false)
 
-  const canEval    = currentUser !== null
+  const canEval    = Boolean(currentUser?.permissions?.includes('evaluation:create') && (currentUser.permissions.includes('admin:access') || currentUser.consultant_id !== Number(consultantId)))
   const skillList  = modules.length > 0 ? modules : []
 
   useEffect(() => {
@@ -471,9 +474,11 @@ function EvaluationsPanel({
   }
 
   async function handleSave() {
+    if (saveInFlight.current) return
     if (evalMode === 'skill' && !module) { setError('Sélectionnez un module ou une compétence.'); return }
     if (evalMode === 'project' && !projetId) { setError('Sélectionnez un projet.'); return }
     if (note === 0) { setError('Sélectionnez une note (1–5 étoiles).'); return }
+    saveInFlight.current = true
     setSaving(true); setError('')
     try {
       await api.post('/scores/', {
@@ -488,7 +493,7 @@ function EvaluationsPanel({
       resetForm()
     } catch (err: any) {
       setError(err.response?.data?.detail ?? 'Erreur lors de la sauvegarde.')
-    } finally { setSaving(false) }
+    } finally { saveInFlight.current = false; setSaving(false) }
   }
 
   async function handleDelete(scoreId: number) {
@@ -498,149 +503,32 @@ function EvaluationsPanel({
     } catch {}
   }
 
-  // Star picker shared between both modes
-  function StarPicker() {
-    return (
-      <div>
-        <label style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#5A6472', letterSpacing: '.06em', display: 'block', marginBottom: 6 }}>
-          Note <span style={{ color: '#ef4444' }}>*</span>
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          {Array.from({ length: 5 }, (_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setNote(i + 1 === note ? 0 : i + 1)}
-              onMouseEnter={() => setHovered(i + 1)}
-              onMouseLeave={() => setHovered(0)}
-              style={{ border: 'none', background: 'none', padding: 2, cursor: 'pointer' }}
-            >
-              <Star size={22} fill={(hovered || note) > i ? NAVY : 'none'} color={(hovered || note) > i ? NAVY : '#d1d5db'} />
-            </button>
-          ))}
-          {note > 0 && <span style={{ fontSize: 12, color: '#5A6472', marginLeft: 4 }}>{note}/5</span>}
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: `1px solid #E0E4E8`, boxShadow: '0 2px 12px rgba(22,43,110,.07)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#5A6472' }}>
+    <div className={evaluationStyles.panel}>
+      <div className={evaluationStyles.header}>
+        <div className={evaluationStyles.heading}>
           Évaluations
         </div>
         {canEval && !showForm && (
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: NAVY, background: '#EEF3FB', border: `1px solid ${NAVY}30`, borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}
+            className={evaluationStyles.openButton}
           >
             <Plus size={11} /> Évaluer
           </button>
         )}
       </div>
 
-      {/* Evaluation form */}
       {showForm && canEval && (
-        <div style={{ background: '#F5F6F8', borderRadius: 12, padding: 14, marginBottom: 14, border: `1px solid #E0E4E8` }}>
-
-          {/* Mode toggle */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            {(['skill', 'project'] as const).map(m => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                style={{
-                  flex: 1, padding: '6px 0', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: 'none',
-                  background: evalMode === m ? NAVY : '#E0E4E8',
-                  color:      evalMode === m ? '#fff' : '#5A6472',
-                }}
-              >
-                {m === 'skill' ? 'Par compétence (module)' : 'Par projet (rendement)'}
-              </button>
-            ))}
-          </div>
-
-          {error && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 10 }}>{error}</div>}
-
-          {/* Skill mode */}
-          {evalMode === 'skill' && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#5A6472', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>
-                Module / Compétence <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <select
-                value={module}
-                onChange={e => setModule(e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', fontSize: 12, border: `1.5px solid ${module ? NAVY : '#E0E4E8'}`, borderRadius: 8, outline: 'none', background: '#fff', fontFamily: 'monospace', fontWeight: module ? 600 : 400 }}
-              >
-                <option value="">— Sélectionner un module —</option>
-                {skillList.length > 0 && (
-                  <optgroup label="Modules du consultant">
-                    {skillList.map(s => <option key={s} value={s}>{s}</option>)}
-                  </optgroup>
-                )}
-                <optgroup label="Autres compétences SAP">
-                  {SAP_MODULES.filter(s => !skillList.includes(s)).map(s => <option key={s} value={s}>{s}</option>)}
-                </optgroup>
-              </select>
-            </div>
-          )}
-
-          {/* Project mode */}
-          {evalMode === 'project' && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#5A6472', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>
-                Projet <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <select
-                value={projetId ?? ''}
-                onChange={e => setProjetId(e.target.value ? Number(e.target.value) : null)}
-                style={{ width: '100%', padding: '7px 10px', fontSize: 12, border: `1.5px solid ${projetId ? NAVY : '#E0E4E8'}`, borderRadius: 8, outline: 'none', background: '#fff', fontWeight: projetId ? 600 : 400 }}
-              >
-                <option value="">— Sélectionner un projet —</option>
-                {allProjets.map(p => <option key={p.id} value={p.id}>{p.nom} ({p.wbs_code})</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Stars */}
-          <div style={{ marginBottom: 12 }}>
-            <StarPicker />
-          </div>
-
-          {/* Comment */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#5A6472', letterSpacing: '.06em', display: 'block', marginBottom: 4 }}>Commentaire (optionnel)</label>
-            <textarea
-              value={commentaire}
-              onChange={e => setCommentaire(e.target.value)}
-              rows={3}
-              placeholder={evalMode === 'skill' ? 'Niveau de maîtrise, points forts, certifications…' : 'Qualité de livraison, comportement, respect des délais…'}
-              style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '1px solid #E0E4E8', borderRadius: 8, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              style={{ flex: 1, padding: '8px 0', background: NAVY, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
-            >
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              style={{ padding: '8px 14px', background: 'transparent', color: '#5A6472', border: '1px solid #E0E4E8', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
+        <EvaluationForm
+          mode={evalMode} modules={skillList} projects={allProjets}
+          module={module} projectId={projetId} rating={note} hovered={hovered}
+          comment={commentaire} saving={saving} error={error}
+          onModeChange={switchMode} onModuleChange={setModule} onProjectChange={setProjetId}
+          onRatingChange={setNote} onHoverChange={setHovered} onCommentChange={setCommentaire}
+          onSave={handleSave} onCancel={resetForm}
+        />
       )}
 
       {/* Score history */}
@@ -649,7 +537,7 @@ function EvaluationsPanel({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[...scores].sort((a, b) => b.date_creation.localeCompare(a.date_creation)).map(s => {
-            const isOwn = currentUser && String(s.evaluateur_id) === currentUser.id
+            const isOwn = currentUser?.permissions?.includes('evaluation:delete')
             const initials = s.evaluateur_nom.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
             const isProjectScore = s.module === 'Rendement projet'
             return (
@@ -674,7 +562,7 @@ function EvaluationsPanel({
                     </span>
                   )}
                   {isOwn && (
-                    <button
+                    <Can permission="consultant:write"><button
                       type="button"
                       onClick={() => handleDelete(s.id)}
                       style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#d1d5db', padding: 2, flexShrink: 0 }}
@@ -682,7 +570,7 @@ function EvaluationsPanel({
                       onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
                     >
                       <Trash2 size={12} />
-                    </button>
+                    </button></Can>
                   )}
                 </div>
                 <div style={{ padding: '8px 12px' }}>
@@ -1036,21 +924,21 @@ export default function ConsultantDetailPage() {
             )}
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button
+              <Can permission="consultant:write"><button
                 onClick={() => setShowDelete(false)}
                 disabled={deleting}
                 style={{ padding: '9px 20px', borderRadius: 100, background: S.bgLight, color: S.gray, border: `1.5px solid ${S.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
               >
                 Annuler
-              </button>
-              <button
+              </button></Can>
+              <Can permission="consultant:write"><button
                 onClick={handleDelete}
                 disabled={deleting}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 100, background: deleting ? '#fca5a5' : '#dc2626', color: '#fff', border: 'none', cursor: deleting ? 'default' : 'pointer', fontSize: 13, fontWeight: 700 }}
               >
                 <Trash2 size={13} />
                 {deleting ? 'Suppression…' : 'Confirmer la suppression'}
-              </button>
+              </button></Can>
             </div>
           </div>
         </>
@@ -1077,7 +965,7 @@ export default function ConsultantDetailPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(22,43,110,.3)',
-          }} onClick={() => fileRef.current?.click()}>
+          }} onClick={() => { if (user?.permissions?.includes('consultant:write')) fileRef.current?.click() }}>
             {consultant.photo
               ? <img src={`${API_URL}${consultant.photo}`} alt={consultant.nom_complet} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -1128,24 +1016,24 @@ export default function ConsultantDetailPage() {
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-              <button
+              <Can permission="consultant:write"><button
                 onClick={() => setShowEdit(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 100, background: S.navy, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, boxShadow: '0 4px 14px rgba(22,43,110,.3)' }}
               >
                 <Pencil size={13} /> Modifier le profil
-              </button>
-              <button
-                onClick={() => fileRef.current?.click()}
+              </button></Can>
+              <Can permission="consultant:write"><button
+                onClick={() => { if (user?.permissions?.includes('consultant:write')) fileRef.current?.click() }}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 100, background: S.bgLight, color: S.navy, border: `1.5px solid ${S.border}`, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >
                 <Upload size={13} /> {consultant.photo ? 'Changer la photo' : 'Ajouter une photo'}
-              </button>
-              <button
+              </button></Can>
+              <Can permission="consultant:write"><button
                 onClick={() => { setShowDelete(true); setDeleteError('') }}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 100, background: '#fff5f5', color: '#dc2626', border: '1.5px solid #fca5a5', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >
                 <Trash2 size={13} /> Supprimer le consultant
-              </button>
+              </button></Can>
             </div>
           </div>
         </div>
@@ -1226,7 +1114,7 @@ export default function ConsultantDetailPage() {
       </div>
 
       {/* ── Infos + Planning ──────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className={evaluationStyles.detailColumns}>
 
         {/* Left: Informations + Evaluations stacked */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1249,7 +1137,7 @@ export default function ConsultantDetailPage() {
               ...(consultant.main_module ? [consultant.main_module] : []),
               ...(consultant.other_modules ?? []),
             ]}
-            currentUser={user ? { id: String(user.id), nom: user.nom, role: user.role } : null}
+            currentUser={user ? { id: String(user.id), nom: user.nom, role: user.role, consultant_id: user.consultant_id, permissions: user.permissions } : null}
           />
         </div>
 

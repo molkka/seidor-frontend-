@@ -1,12 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
-import { describeApiError } from '@/services/api'
 import { authApi } from '@/services/authApi'
+import { AnimatePresence } from 'framer-motion'
+import { KeyRound, LoaderCircle, Mail, MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -16,93 +14,150 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+import {
+  AuthBackToSignIn,
+  AuthCardHeader,
+} from '@/components/auth/auth-card-layout'
+import { AuthInput, AuthMessage, Reveal } from '@/components/auth/auth-controls'
+import { authRequestErrorMessage, httpStatus } from '../../request-error'
 
 const formSchema = z.object({
-  email: z.string().email({ message: 'Adresse email invalide.' }),
+  email: z
+    .string()
+    .trim()
+    .min(1, { message: 'Enter your email address.' })
+    .email({ message: 'Enter a valid email address.' }),
 })
 
-export function ForgotPasswordForm({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLFormElement>) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [sent, setSent] = useState(false)
-  const [mailDown, setMailDown] = useState(false)
+type FormValues = z.infer<typeof formSchema>
 
-  const form = useForm<z.infer<typeof formSchema>>({
+export function ForgotPasswordForm() {
+  const [sending, setSending] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  // Also the duplicate-submission guard: set while a request is in flight
+  const inFlight = useRef<AbortController | null>(null)
+
+  useEffect(() => () => inFlight.current?.abort(), [])
+
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: '' },
   })
 
-  async function onSubmit(data: z.infer<typeof formSchema>) {
-    setIsLoading(true)
+  async function onSubmit({ email }: FormValues) {
+    if (inFlight.current) return
+    const controller = new AbortController()
+    inFlight.current = controller
+    setSending(true)
+    setError(null)
     try {
-      const res = await authApi.forgotPassword(data.email)
-      // L'API répond 200 même sans SMTP configuré (anti-énumération d'emails).
-      // `mail_configured` dit si un email pouvait réellement partir : sans ça on
-      // affichait "Email envoyé" alors qu'aucun message n'était jamais émis.
-      if (res.data.mail_configured === false) {
-        setMailDown(true)
-        toast.error("Le service d'envoi d'emails n'est pas configuré sur le serveur.")
-        return
-      }
-      setSent(true)
-      toast.success(`Un lien de réinitialisation a été envoyé à ${data.email}`)
-      form.reset()
+      await authApi.forgotPassword(email, controller.signal)
+      setSentTo(email)
     } catch (err) {
-      toast.error(describeApiError(err, 'Une erreur est survenue. Veuillez réessayer.'))
+      if (controller.signal.aborted) return
+      if (httpStatus(err) === 422) {
+        form.setError('email', { message: 'Enter a valid email address.' })
+      } else {
+        setError(authRequestErrorMessage(err))
+      }
     } finally {
-      setIsLoading(false)
+      inFlight.current = null
+      setSending(false)
     }
   }
 
-  if (mailDown) {
+  if (sentTo) {
     return (
-      <div className='rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900'>
-        <p className='font-medium'>Envoi d'email indisponible</p>
-        <p className='mt-1'>
-          Le serveur n'a pas de configuration SMTP (SMTP_USER / SMTP_PASSWORD).
-          Aucun email de réinitialisation ne peut être envoyé pour l'instant —
-          contactez un administrateur pour réinitialiser votre mot de passe.
+      <>
+        <AuthCardHeader
+          icon={MailCheck}
+          tone='success'
+          title='Check your email'
+          autoFocus
+        >
+          If an account exists for{' '}
+          <span className='font-medium break-all text-foreground'>
+            {sentTo}
+          </span>
+          , you will receive instructions to reset your password.
+        </AuthCardHeader>
+        <p className='mt-4 text-sm leading-relaxed text-muted-foreground'>
+          The link expires in 1 hour. Didn't receive anything? Check your spam
+          folder, then try again.
         </p>
-      </div>
-    )
-  }
-
-  if (sent) {
-    return (
-      <div className='rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800'>
-        Email envoyé. Vérifiez votre boîte de réception et cliquez sur le lien pour réinitialiser votre mot de passe.
-      </div>
+        <Button
+          type='button'
+          variant='outline'
+          className='mt-6 h-10 w-full bg-white font-semibold hover:bg-muted hover:text-foreground'
+          onClick={() => {
+            form.reset({ email: sentTo })
+            setSentTo(null)
+          }}
+        >
+          Try again
+        </Button>
+        <AuthBackToSignIn />
+      </>
     )
   }
 
   return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className={cn('grid gap-2', className)}
-        {...props}
-      >
-        <FormField
-          control={form.control}
-          name='email'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input placeholder='vous@seidor.com' {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button className='mt-2' disabled={isLoading}>
-          {isLoading ? <Loader2 className='animate-spin' /> : null}
-          Envoyer le lien
-        </Button>
-      </form>
-    </Form>
+    <>
+      <AuthCardHeader icon={KeyRound} title='Forgot your password?'>
+        Enter your email address and we'll send you a link to reset your
+        password.
+      </AuthCardHeader>
+
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          noValidate
+          className='mt-8 flex flex-col'
+        >
+          <FormField
+            control={form.control}
+            name='email'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email address</FormLabel>
+                <FormControl>
+                  <AuthInput
+                    type='email'
+                    icon={Mail}
+                    placeholder='you@seidor.com'
+                    autoComplete='email'
+                    autoFocus
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <AnimatePresence initial={false}>
+            {error && (
+              <Reveal key='error'>
+                <div className='pt-5'>
+                  <AuthMessage tone='error'>{error}</AuthMessage>
+                </div>
+              </Reveal>
+            )}
+          </AnimatePresence>
+
+          <Button
+            type='submit'
+            disabled={sending}
+            className='mt-6 h-10 w-full font-semibold'
+          >
+            {sending && <LoaderCircle className='animate-spin' />}
+            {sending ? 'Sending…' : 'Send reset link'}
+          </Button>
+        </form>
+      </Form>
+
+      <AuthBackToSignIn />
+    </>
   )
 }

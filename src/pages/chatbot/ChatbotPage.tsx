@@ -7,6 +7,8 @@ import {
 } from 'recharts'
 import { api } from '@/services/api'
 import { useT } from '@/hooks/useT'
+import { useI18nStore } from '@/store/i18nStore'
+import { chatbotErrorMessage, chatbotLanguage } from '@/services/chatbotErrors'
 
 interface ChartData {
   title: string
@@ -38,7 +40,7 @@ function ChartMessage({ chart, type }: { chart: ChartData; type: string }) {
           <BarChart data={chart.data} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
             <XAxis dataKey={chart.nameKey} tick={{ fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
             <YAxis tick={{ fontSize: 11 }} unit={chart.unit} />
-            <Tooltip formatter={(v: number) => [`${v}${chart.unit}`, '']} />
+            <Tooltip formatter={(v) => [`${v}${chart.unit}`, '']} />
             <Bar dataKey={chart.valueKey} radius={[4, 4, 0, 0]}>
               {chart.data.map((_, i) => (
                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
@@ -54,8 +56,8 @@ function ChartMessage({ chart, type }: { chart: ChartData; type: string }) {
               cx="50%"
               cy="45%"
               outerRadius={85}
-              label={({ name, percent }: { name: string; percent: number }) =>
-                `${name} ${(percent * 100).toFixed(0)}%`
+              label={({ name, percent }) =>
+                `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
               }
               labelLine={false}
             >
@@ -64,14 +66,14 @@ function ChartMessage({ chart, type }: { chart: ChartData; type: string }) {
               ))}
             </Pie>
             <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => [`${v}`, '']} />
+            <Tooltip formatter={(v) => [`${v}`, '']} />
           </PieChart>
         ) : (
           <LineChart data={chart.data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
             <XAxis dataKey={chart.nameKey} tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} unit={chart.unit} />
-            <Tooltip formatter={(v: number) => [`${v}${chart.unit}`, '']} />
+            <Tooltip formatter={(v) => [`${v}${chart.unit}`, '']} />
             <Line
               type="monotone"
               dataKey={chart.valueKey}
@@ -94,8 +96,9 @@ const WELCOME: Message = {
 }
 
 // ── Page principale ────────────────────────────────────────────────────────────
-export default function ChatbotPage() {
+export default function ChatbotPage({ embedded = false }: { embedded?: boolean }) {
   const t = useT().chatbot
+  const lang = useI18nStore(s => s.lang)
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -123,12 +126,13 @@ export default function ChatbotPage() {
 
   async function sendMessage(text?: string) {
     const question = text ?? input
-    if (!question.trim()) return
+    if (!question.trim() || loading) return
+    const language = chatbotLanguage(question, lang)
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: question }])
     setLoading(true)
     try {
-      const res = await api.post('/chatbot/ask', { question })
+      const res = await api.post('/chatbot/ask', { question, language })
       setMessages(prev => [
         ...prev,
         {
@@ -138,12 +142,12 @@ export default function ChatbotPage() {
           chart: res.data.chart ?? undefined,
         },
       ])
-    } catch {
+    } catch (error) {
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Désolé, je ne peux pas répondre pour le moment. Vérifiez que le backend est lancé.',
+          content: chatbotErrorMessage(error, language),
         },
       ])
     } finally {
@@ -153,10 +157,10 @@ export default function ChatbotPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] max-w-3xl mx-auto">
-      <div className="mb-4 flex items-start justify-between">
+    <div className={embedded ? 'flex h-full min-h-0 flex-col' : 'flex flex-col h-[calc(100vh-6rem)] max-w-3xl mx-auto'}>
+      <div className="mb-2 flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">{t.title}</h2>
+          {!embedded && <h2 className="text-xl font-semibold text-foreground">{t.title}</h2>}
           <p className="text-sm text-muted-foreground mt-0.5">
             FR / EN / <strong>عربي</strong>
           </p>
@@ -172,11 +176,11 @@ export default function ChatbotPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1">
+      <div className="min-h-0 flex-1 overflow-y-auto space-y-3 mb-4 pr-1" role="log" aria-live="polite">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
-              className={`px-4 py-2.5 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
+              className={`min-w-0 break-words px-4 py-2.5 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
                 m.role === 'user'
                   ? 'bg-primary text-primary-foreground max-w-sm'
                   : 'bg-card border border-border text-foreground w-full max-w-lg'
@@ -206,9 +210,6 @@ export default function ChatbotPage() {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
-      </div>
-
       {/* Suggestions */}
       {messages.length <= 1 && (
         <div className="flex flex-wrap gap-2 mb-3">
@@ -223,18 +224,22 @@ export default function ChatbotPage() {
           ))}
         </div>
       )}
+        <div ref={bottomRef} />
+      </div>
 
       {/* Input */}
-      <div className="flex gap-2">
+      <div className="flex shrink-0 gap-2">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && sendMessage()}
+          aria-label={t.placeholder}
           placeholder={t.placeholder}
-          className="flex-1 px-4 py-2.5 bg-background border border-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="min-w-0 flex-1 px-3 py-2.5 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
         />
         <button
           onClick={() => sendMessage()}
+          aria-label={lang === 'fr' ? 'Envoyer' : 'Send'}
           disabled={!input.trim() || loading}
           className="px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >

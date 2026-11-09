@@ -129,7 +129,6 @@ export default function LoginPage() {
               onSuccess={handleGoogleSuccess}
               onError={() => setError('Connexion Google échouée.')}
               text="signin_with"
-              locale="fr"
               width="100%"
             />
           </div>

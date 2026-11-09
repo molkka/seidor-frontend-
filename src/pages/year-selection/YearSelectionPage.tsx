@@ -1,488 +1,254 @@
-import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight, CalendarDays, ChevronUp, ChevronDown } from 'lucide-react'
-import { usePlanningYearStore } from '@/store/planningYearStore'
 import { useAuthStore } from '@/store/authStore'
+import { usePlanningYearStore } from '@/store/planningYearStore'
+import { MotionConfig, motion } from 'framer-motion'
+import {
+  ArrowRight,
+  CalendarDays,
+  CalendarRange,
+  FolderKanban,
+  LoaderCircle,
+  Users,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useT } from '@/hooks/useT'
-
-const S = {
-  navy:      '#162B6E',
-  blue:      '#1E3A8A',
-  dark:      '#0A0F1C',
-  gray:      '#5A6472',
-  border:    '#E0E4E8',
-  bg:        '#F5F6F8',
-  navyLight: '#EEF3FB',
-  white:     '#FFFFFF',
-}
+import { Button } from '@/components/ui/button'
+import { isoWeeksInYear, weekdaysInYear } from './year-calendar'
+import { YearPicker } from './year-picker'
 
 const MIN_YEAR = 2025
 const MAX_YEAR = 2100
+const FEATURE_ICONS = [CalendarRange, Users, FolderKanban]
 
-function isoWeeksInYear(y: number) {
-  const end   = new Date(y, 11, 28).getDay() || 7
-  const start = new Date(y, 0, 4).getDay()  || 7
-  return end >= 4 ? 53 : start === 4 ? 53 : 52
-}
-function workDaysInYear(y: number) {
-  let n = 0
-  for (let m = 0; m < 12; m++) {
-    const days = new Date(y, m + 1, 0).getDate()
-    for (let d = 1; d <= days; d++) {
-      const dow = new Date(y, m, d).getDay()
-      if (dow !== 0 && dow !== 6) n++
-    }
-  }
-  return n
-}
-
-// ── Slot config: offsets relative to center ────────────────────────────────
-// offset: -2 = two above, -1 = one above, 0 = center, 1 = one below, 2 = two below
-const SLOTS = [-2, -1, 0, 1, 2]
-const SLOT: Record<number, { size: number; weight: number; opacity: number; y: number }> = {
-  '-2': { size: 22,  weight: 400, opacity: 0.10, y: -140 },
-  '-1': { size: 36,  weight: 500, opacity: 0.30, y: -72  },
-   '0': { size: 100, weight: 900, opacity: 1.00, y: 0    },
-   '1': { size: 36,  weight: 500, opacity: 0.30, y: 72   },
-   '2': { size: 22,  weight: 400, opacity: 0.10, y: 140  },
-}
+const clampYear = (y: number) => Math.min(MAX_YEAR, Math.max(MIN_YEAR, y))
 
 export default function YearSelectionPage() {
-  const navigate     = useNavigate()
-  const t            = useT().yearSelection
-  const nom          = useAuthStore(s => s.user?.nom) ?? ''
-  const { selectedYear: storedYear, setSelectedYear } = usePlanningYearStore()
+  const navigate = useNavigate()
+  const t = useT().yearSelection
+  const nom = useAuthStore((s) => s.user?.nom) ?? ''
+  const { selectedYear: activeYear, setSelectedYear } = usePlanningYearStore()
 
-  const [year, setYear]           = useState(storedYear ?? new Date().getFullYear())
-  const [dir,  setDir]            = useState(0)   // +1 = going forward, -1 = going back
+  const thisYear = new Date().getFullYear()
+  const [year, setYear] = useState(() => clampYear(activeYear ?? thisYear))
+  const [direction, setDirection] = useState(0)
   const [confirming, setConfirming] = useState(false)
-  const dragRef = useRef<number | null>(null)
-  const accumRef = useRef(0)
 
-  const weeks    = isoWeeksInYear(year)
-  const workDays = workDaysInYear(year)
+  const quickYears = Array.from({ length: 6 }, (_, i) => thisYear + i).filter(
+    (y) => y >= MIN_YEAR && y <= MAX_YEAR
+  )
+  const greeting = nom
+    ? `${t.greeting} ${nom}`
+    : t.greeting.replace(/,\s*$/, '')
 
-  function change(delta: number) {
-    const next = year + delta
-    if (next < MIN_YEAR || next > MAX_YEAR) return
-    setDir(delta > 0 ? 1 : -1)
+  function selectYear(next: number) {
+    if (next === year) return
+    setDirection(next > year ? 1 : -1)
     setYear(next)
   }
 
-  async function confirm(chosen = year) {
+  function confirm() {
     if (confirming) return
     setConfirming(true)
-    setSelectedYear(chosen)
-    await new Promise(r => setTimeout(r, 220))
-    navigate({ to: '/dashboard' })
+    setSelectedYear(year)
+    navigate({ to: '/dashboard' }).catch(() => setConfirming(false))
   }
-
-  // Keyboard
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp')   change(-1)
-      if (e.key === 'ArrowDown') change(+1)
-      if (e.key === 'Enter')     confirm()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [year, confirming])
-
-  // Wheel
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault()
-    change(e.deltaY > 0 ? 1 : -1)
-  }
-
-  // Drag / touch
-  function onPointerDown(e: React.PointerEvent) {
-    dragRef.current = e.clientY
-    accumRef.current = 0
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  }
-  function onPointerMove(e: React.PointerEvent) {
-    if (dragRef.current === null) return
-    const dy = dragRef.current - e.clientY
-    accumRef.current += dy
-    dragRef.current = e.clientY
-    if (accumRef.current >  44) { change(+1); accumRef.current = 0 }
-    if (accumRef.current < -44) { change(-1); accumRef.current = 0 }
-  }
-  function onPointerUp() { dragRef.current = null }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      display: 'flex',
-      background: S.white,
-      fontFamily: "'Inter', system-ui, sans-serif",
-    }}>
-
-      {/* ══ LEFT PANEL ═══════════════════════════════════════════════════════ */}
-      <motion.div
-        initial={{ x: -32, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          width: '36%', minWidth: 260, flexShrink: 0,
-          background: `linear-gradient(160deg, ${S.navy} 0%, ${S.blue} 60%, #0F2966 100%)`,
-          padding: '52px 44px',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          position: 'relative', overflow: 'hidden',
-        }}
-      >
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          backgroundImage: [
-            'repeating-linear-gradient(rgba(255,255,255,0.035) 0px, transparent 1px, transparent 48px)',
-            'repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0px, transparent 1px, transparent 48px)',
-          ].join(', '),
-        }} />
-
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            marginBottom: 40, paddingBottom: 24,
-            borderBottom: '1px solid rgba(255,255,255,0.12)',
-          }}>
-            <CalendarDays size={15} style={{ color: 'rgba(255,255,255,0.65)' }} />
-            <span style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '.15em',
-              color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase',
-            }}>SAP Africa Planning</span>
-          </div>
-
-          <div style={{
-            fontSize: 'clamp(24px, 2.8vw, 34px)', fontWeight: 800,
-            color: S.white, letterSpacing: '-.03em', lineHeight: 1.15, marginBottom: 8,
-          }}>
-            {t.greeting} {nom}
-          </div>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.50)', marginBottom: 28, lineHeight: 1.55 }}>
-            {t.tagline}
-          </p>
-          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.58)', lineHeight: 1.7 }}>
-            {t.description}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 28 }}>
-            {t.features.map((f: string) => (
-              <span key={f} style={{
-                padding: '4px 13px', borderRadius: 100,
-                background: 'rgba(255,255,255,0.10)',
-                border: '1px solid rgba(255,255,255,0.16)',
-                fontSize: 11, fontWeight: 600, letterSpacing: '.06em',
-                color: 'rgba(255,255,255,0.78)',
-              }}>{f}</span>
-            ))}
-          </div>
-        </div>
-
-        <p style={{
-          position: 'relative', zIndex: 1,
-          fontSize: 11, color: 'rgba(255,255,255,0.22)',
-          letterSpacing: '.05em', margin: 0,
-        }}>© 2025 SEIDOR · SAP Africa Planning</p>
-      </motion.div>
-
-      {/* ══ RIGHT PANEL ══════════════════════════════════════════════════════ */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          flex: 1, background: S.bg,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center',
-          // `safe center` plutot que `center` : quand le contenu depasse la hauteur
-          // disponible, un centrage classique deborde des DEUX cotes et le haut devient
-          // inatteignable au defilement. `safe` bascule alors sur un alignement en debut
-          // de boite, ce qui garde tout le contenu accessible.
-          justifyContent: 'safe center',
-          padding: '40px 48px', gap: 0,
-          // La racine est en position:fixed/inset:0, donc sa hauteur est exactement celle
-          // de la fenetre : sans defilement, tout ce qui depasse est perdu.
-          overflowY: 'auto',
-        }}
-      >
-        {/* Step label */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          background: S.navyLight, border: `1px solid rgba(22,43,110,0.14)`,
-          borderRadius: 100, padding: '4px 14px', marginBottom: 18,
-        }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: S.navy }} />
-          <span style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '.14em',
-            color: S.navy, textTransform: 'uppercase',
-          }}>{t.step}</span>
-        </div>
-
-        <h1 style={{
-          fontSize: 'clamp(18px, 2vw, 24px)', fontWeight: 800,
-          color: S.dark, letterSpacing: '-.025em',
-          margin: '0 0 4px', textAlign: 'center',
-        }}>{t.title}</h1>
-        <p style={{
-          fontSize: 13, color: S.gray, margin: '0 0 32px',
-          textAlign: 'center', lineHeight: 1.5,
-        }}>{t.subtitle}</p>
-
-        {/* ── Roller ──────────────────────────────────────────────────────── */}
-        <div style={{
-          background: S.white,
-          border: `1px solid ${S.border}`,
-          borderRadius: 20,
-          boxShadow: '0 4px 24px rgba(0,51,160,0.08)',
-          width: '100%', maxWidth: 400,
-          display: 'flex', alignItems: 'center', gap: 0,
-          overflow: 'hidden',
-          marginBottom: 16,
-          // Sans ceci, le tambour est ecrase. Un element flex vaut `flex-shrink: 1` par
-          // defaut : des que le contenu de la colonne depasse la hauteur de la fenetre,
-          // flexbox reduit le plus grand element, ici le rouleau. Combine a son
-          // `overflow: hidden`, cela tronquait les chiffres de l'annee en une bande de
-          // quelques pixels au lieu de les reduire proprement.
-          flexShrink: 0,
-        }}>
-          {/* Up button */}
-          <button
-            onClick={() => change(-1)}
-            disabled={year <= MIN_YEAR}
-            style={{
-              width: 52, alignSelf: 'stretch', flexShrink: 0,
-              background: 'none', border: 'none',
-              borderRight: `1px solid ${S.border}`,
-              color: year <= MIN_YEAR ? S.border : S.navy,
-              cursor: year <= MIN_YEAR ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .15s',
-            }}
-            onMouseEnter={e => { if (year > MIN_YEAR) (e.currentTarget as HTMLElement).style.background = S.navyLight }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
-          >
-            <ChevronUp size={20} />
-          </button>
-
-          {/* Drum cylinder */}
-          <div
-            style={{
-              flex: 1,
-              // Hauteur adaptative plutot que 320 px fixes : sur un ecran de portable
-              // 720 px de haut, 320 px de tambour plus le titre, les puces d'annee, le
-              // bouton et les raccourcis depassaient la fenetre. Le plancher de 220 px
-              // reste superieur aux 100 px du chiffre central plus sa marge, donc l'annee
-              // selectionnee n'est jamais tronquee ; seules les annees a +/-2, affichees
-              // a 10 % d'opacite et deja couvertes par le degrade, sortent du cadre.
-              height: 'clamp(220px, 34vh, 320px)',
-              position: 'relative',
-              cursor: 'grab', userSelect: 'none', overflow: 'hidden',
-            }}
-            onWheel={onWheel}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-          >
-            {/* Top + bottom fade masks */}
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
-              background: `linear-gradient(to bottom,
-                ${S.white} 0%,
-                rgba(255,255,255,0) 22%,
-                rgba(255,255,255,0) 78%,
-                ${S.white} 100%)`,
-            }} />
-
-            {/* Center highlight band */}
-            <div style={{
-              position: 'absolute', left: 0, right: 0,
-              top: 'calc(50% - 58px)', height: 116,
-              background: S.navyLight,
-              borderTop: `1px solid rgba(22,43,110,0.10)`,
-              borderBottom: `1px solid rgba(22,43,110,0.10)`,
-              zIndex: 1, pointerEvents: 'none',
-            }} />
-
-            {/* Year slots */}
-            {SLOTS.map(offset => {
-              const displayYear = year + offset
-              const cfg = SLOT[String(offset) as keyof typeof SLOT]
-              const isValid = displayYear >= MIN_YEAR && displayYear <= MAX_YEAR
-
-              return (
-                <div
-                  key={offset}
-                  style={{
-                    position: 'absolute', left: 0, right: 0, top: '50%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transform: `translateY(calc(-50% + ${cfg.y}px))`,
-                    opacity: isValid ? cfg.opacity : 0,
-                    pointerEvents: isValid && offset !== 0 ? 'auto' : 'none',
-                    cursor: isValid && offset !== 0 ? 'pointer' : 'default',
-                    zIndex: offset === 0 ? 3 : 0,
-                  }}
-                  onClick={() => isValid && offset !== 0 && change(offset)}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={displayYear}
-                      initial={{ y: dir > 0 ? 28 : -28, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{   y: dir > 0 ? -28 : 28, opacity: 0 }}
-                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                      style={{
-                        display: 'block',
-                        fontSize: cfg.size,
-                        fontWeight: cfg.weight,
-                        lineHeight: 1,
-                        color: offset === 0 ? S.navy : S.gray,
-                        letterSpacing: offset === 0 ? '-0.04em' : '-0.01em',
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      {isValid ? displayYear : ''}
-                    </motion.span>
-                  </AnimatePresence>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Down button */}
-          <button
-            onClick={() => change(+1)}
-            disabled={year >= MAX_YEAR}
-            style={{
-              width: 52, alignSelf: 'stretch', flexShrink: 0,
-              background: 'none', border: 'none',
-              borderLeft: `1px solid ${S.border}`,
-              color: year >= MAX_YEAR ? S.border : S.navy,
-              cursor: year >= MAX_YEAR ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .15s',
-            }}
-            onMouseEnter={e => { if (year < MAX_YEAR) (e.currentTarget as HTMLElement).style.background = S.navyLight }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
-          >
-            <ChevronDown size={20} />
-          </button>
-        </div>
-
-        {/* Stats pill */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={year}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.16 }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              background: S.white, border: `1px solid ${S.border}`,
-              borderRadius: 100, padding: '8px 20px',
-              marginBottom: 24,
-              boxShadow: '0 2px 8px rgba(0,51,160,0.05)',
-            }}
-          >
-            <span style={{ fontSize: 13, color: S.gray }}>
-              <strong style={{ color: S.navy, fontWeight: 700 }}>{weeks}</strong> {t.weeks}
-            </span>
-            <span style={{ color: S.border }}>·</span>
-            <span style={{ fontSize: 13, color: S.gray }}>
-              <strong style={{ color: S.navy, fontWeight: 700 }}>{workDays}</strong> {t.workDays}
-            </span>
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Quick access */}
-        <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ flex: 1, height: 1, background: S.border }} />
-            <span style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '.14em',
-              color: S.gray, textTransform: 'uppercase', whiteSpace: 'nowrap',
-            }}>{t.quickAccess}</span>
-            <div style={{ flex: 1, height: 1, background: S.border }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i).map(y => {
-              const isActive = year === y
-              return (
-                <motion.button
-                  key={y}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => { setDir(y > year ? 1 : -1); setYear(y) }}
-                  style={{
-                    padding: '6px 16px', borderRadius: 100,
-                    fontSize: 13, fontWeight: isActive ? 700 : 500,
-                    border: `1px solid ${isActive ? 'rgba(22,43,110,0.28)' : S.border}`,
-                    background: isActive ? S.navyLight : S.white,
-                    color: isActive ? S.navy : S.gray,
-                    cursor: 'pointer', transition: 'all .15s',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
-                >{y}</motion.button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Launch button */}
-        <motion.button
-          whileHover={confirming ? {} : { boxShadow: '0 8px 32px rgba(22,43,110,0.38)' }}
-          whileTap={confirming ? {} : { scale: 0.99 }}
-          onClick={() => confirm()}
-          disabled={confirming}
-          style={{
-            width: '100%', maxWidth: 400, height: 54,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            borderRadius: 14,
-            background: `linear-gradient(135deg, ${S.navy}, ${S.blue})`,
-            border: 'none', color: S.white,
-            fontSize: 15, fontWeight: 700, letterSpacing: '.01em',
-            cursor: confirming ? 'default' : 'pointer',
-            boxShadow: '0 4px 20px rgba(22,43,110,0.28)',
-            opacity: confirming ? 0.75 : 1,
-            transition: 'opacity .2s, box-shadow .2s',
-            marginBottom: 14,
-          }}
+    <MotionConfig reducedMotion='user'>
+      {/* Full-screen above the app top bar (z-50); `light` pins the palette */}
+      <div className='light fixed inset-0 z-60 flex flex-col overflow-y-auto bg-background text-foreground scheme-light lg:flex-row lg:overflow-hidden'>
+        {/* ── Brand panel ───────────────────────────────────────── */}
+        <motion.aside
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className='flex shrink-0 flex-col surface-brand px-6 py-8 text-white sm:px-10 lg:w-88 lg:py-10 xl:w-104 xl:px-12 xl:py-12 2xl:w-120'
         >
-          {confirming ? (
-            <>
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-                style={{
-                  width: 16, height: 16, borderRadius: '50%',
-                  border: '2px solid rgba(255,255,255,0.3)', borderTopColor: S.white,
+          <div className='flex h-10 items-center gap-3'>
+            <span className='flex size-9 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/15 ring-inset'>
+              <CalendarDays className='size-4' aria-hidden />
+            </span>
+            <div className='leading-tight'>
+              <p className='text-sm font-semibold'>SAP Africa Planning</p>
+              <p className='text-xs tracking-wide text-white/60'>SEIDOR</p>
+            </div>
+          </div>
+
+          <div className='mt-8 lg:my-auto lg:py-10'>
+            <h2 className='max-w-xs text-2xl leading-tight font-semibold tracking-tight text-balance xl:text-3xl'>
+              {greeting}
+            </h2>
+            <p className='mt-2 text-sm text-balance text-white/75 xl:text-base'>
+              {t.tagline}
+            </p>
+            <p className='mt-6 hidden max-w-sm text-sm leading-relaxed text-white/65 md:block'>
+              {t.description}
+            </p>
+            <ul className='mt-8 hidden space-y-3 lg:block'>
+              {t.features.map((feature, i) => {
+                const Icon = FEATURE_ICONS[i] ?? CalendarRange
+                return (
+                  <li
+                    key={feature}
+                    className='flex items-center gap-3 text-sm font-medium text-white/85'
+                  >
+                    <span className='flex size-8 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/10 ring-inset'>
+                      <Icon className='size-4' aria-hidden />
+                    </span>
+                    {feature}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+
+          <footer className='hidden border-t border-white/10 pt-6 text-xs text-white/50 lg:block'>
+            © {thisYear} SEIDOR · SAP Africa Planning
+          </footer>
+        </motion.aside>
+
+        {/* ── Year selection ────────────────────────────────────── */}
+        <main className='flex flex-1 justify-center px-6 py-10 sm:px-10 lg:overflow-y-auto lg:py-12'>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.4,
+              delay: 0.05,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className='my-auto w-full max-w-lg'
+          >
+            <p className='text-xs font-semibold tracking-widest text-primary uppercase'>
+              {t.step}
+            </p>
+            <h1 className='mt-3 text-2xl font-semibold tracking-tight text-balance sm:text-3xl'>
+              {t.title}
+            </h1>
+            <p className='mt-2 text-sm text-muted-foreground sm:text-base'>
+              {t.subtitle}
+            </p>
+
+            <section
+              aria-label={t.pickerLabel}
+              className='mt-8 rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-8'
+            >
+              <YearPicker
+                value={year}
+                min={MIN_YEAR}
+                max={MAX_YEAR}
+                direction={direction}
+                onChange={selectYear}
+                onConfirm={confirm}
+                autoFocus
+                labels={{
+                  picker: t.pickerLabel,
+                  previous: t.previousYear,
+                  next: t.nextYear,
                 }}
               />
-              {t.loading}
-            </>
-          ) : (
-            <>
-              {t.launch} {year}
-              <ArrowRight size={16} />
-            </>
-          )}
-        </motion.button>
 
-        {/* Keyboard hint */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 6, flexWrap: 'wrap',
-        }}>
-          {(['↑', '↓', '↩'] as const).map(k => (
-            <kbd key={k} style={{
-              fontSize: 11, fontFamily: 'monospace', fontWeight: 600,
-              color: S.gray, background: S.white, border: `1px solid ${S.border}`,
-              borderRadius: 5, padding: '2px 7px', lineHeight: 1.6,
-            }}>{k}</kbd>
-          ))}
-          <span style={{ fontSize: 11, color: S.border }}> · {t.hint}</span>
-        </div>
-      </motion.div>
+              {/* Reserved height: no layout shift when the badge toggles */}
+              <div className='mt-1 flex h-6 justify-center'>
+                {year === activeYear && (
+                  <span className='inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-xs font-medium text-emerald-700'>
+                    <span
+                      aria-hidden
+                      className='size-1.5 rounded-full bg-emerald-500'
+                    />
+                    {t.active}
+                  </span>
+                )}
+              </div>
+
+              <dl className='mt-4 grid grid-cols-2 divide-x divide-border rounded-xl border border-border'>
+                <Metric label={t.weeksLabel} value={isoWeeksInYear(year)} />
+                <Metric label={t.workDaysLabel} value={weekdaysInYear(year)} />
+              </dl>
+              <p className='mt-2 text-xs text-muted-foreground'>
+                {t.calendarNote}
+              </p>
+
+              <Button
+                type='button'
+                onClick={confirm}
+                disabled={confirming}
+                className='mt-6 h-10 w-full font-semibold'
+              >
+                {confirming ? (
+                  <>
+                    <LoaderCircle className='animate-spin' />
+                    {t.loading}
+                  </>
+                ) : (
+                  <>
+                    {t.launch} {year}
+                    <ArrowRight />
+                  </>
+                )}
+              </Button>
+            </section>
+
+            {quickYears.length > 0 && (
+              <section className='mt-8'>
+                <h2 className='text-xs font-semibold tracking-widest text-muted-foreground uppercase'>
+                  {t.quickAccess}
+                </h2>
+                <div className='mt-3 flex flex-wrap gap-2'>
+                  {quickYears.map((y) => (
+                    <button
+                      key={y}
+                      type='button'
+                      aria-pressed={y === year}
+                      onClick={() => selectYear(y)}
+                      className={cn(
+                        'h-8 rounded-md border px-3 text-sm tabular-nums transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/25',
+                        y === year
+                          ? 'border-primary/30 bg-secondary font-semibold text-primary'
+                          : 'border-border bg-white text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+                      )}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <p className='mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground'>
+              <span className='inline-flex items-center gap-1.5'>
+                <Kbd>←</Kbd>
+                <Kbd>→</Kbd>
+                {t.hintChange}
+              </span>
+              <span className='inline-flex items-center gap-1.5'>
+                <Kbd>{t.enterKey}</Kbd>
+                {t.hintConfirm}
+              </span>
+            </p>
+          </motion.div>
+        </main>
+      </div>
+    </MotionConfig>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className='px-4 py-3'>
+      <dt className='text-xs text-muted-foreground'>{label}</dt>
+      <dd className='mt-0.5 text-xl font-semibold tracking-tight tabular-nums'>
+        {value}
+      </dd>
     </div>
+  )
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className='inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-white px-1 font-sans text-xs font-medium text-foreground'>
+      {children}
+    </kbd>
   )
 }

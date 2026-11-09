@@ -1,7 +1,12 @@
+import { useCan } from '@/hooks/use-can'
 // src/pages/dashboard/DashboardPage.tsx
 import { useEffect, useState } from 'react'
-import { Calendar, Activity, X } from 'lucide-react'
+import { Calendar, Activity } from 'lucide-react'
+import { DashboardTasksDialog } from './DashboardTasksDialog'
+import { PlanningAirflowLauncher } from './PlanningAirflowLauncher'
 import { YearPicker } from '@/components/year-picker'
+import { DashboardViewToggle, type DashboardView } from '@/components/dashboard-view-toggle'
+import { SupersetDashboard } from '@/components/superset-dashboard'
 import { usePlanningYearStore } from '@/store/planningYearStore'
 import { useT } from '@/hooks/useT'
 import {
@@ -81,82 +86,7 @@ interface ModalDetail {
 }
 
 function DetailModal({ data, onClose }: { data: ModalDetail; onClose: () => void }) {
-  const total = data.items.reduce((s, i) => s + i.heures, 0)
-  const t = useT()
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div>
-            <h3 className="text-base font-semibold text-foreground">{data.titre}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{data.sousTitre}</p>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Total */}
-        <div className="mx-5 mt-4 bg-primary/10 rounded-xl px-4 py-3 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground font-medium">{t.common.total} — {t.common.hours}</span>
-          <span className="text-xl font-bold text-primary">{total}h</span>
-        </div>
-
-        {/* Liste */}
-        <div className="p-5 space-y-2 max-h-72 overflow-y-auto">
-          {data.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">{t.common.noData}</p>
-          ) : data.items.map((item, i) => {
-            const pct = total > 0 ? Math.round((item.heures / total) * 100) : 0
-            return (
-              <div key={i}
-                className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors">
-                {/* Icône */}
-                {item.couleur ? (
-                  <div className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ background: item.couleur }} />
-                ) : (
-                  <div className="w-9 h-7 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <span className="text-[11px] font-bold font-mono text-primary">{item.code}</span>
-                  </div>
-                )}
-                {/* Nom */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-foreground truncate">{item.nom}</div>
-                  {item.couleur && (
-                    <div className="text-[10px] font-mono text-muted-foreground">{item.code}</div>
-                  )}
-                </div>
-                {/* Barre + heures */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="w-16 bg-muted rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-primary"
-                      style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="text-sm font-bold text-foreground w-10 text-right">{item.heures}h</span>
-                  <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="p-4 border-t border-border">
-          <button onClick={onClose}
-            className="w-full px-4 py-2 text-sm border border-input rounded-xl hover:bg-muted transition-colors">
-            {t.common.close}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return <DashboardTasksDialog data={data} onClose={onClose} />
 }
 
 // ─── KPI Card — SEIDOR style ───────────────────────────────────
@@ -332,7 +262,17 @@ function CalendrierView({ affectations, consultants, projets, annee }: {
                             <td key={mois} className="px-1 py-1 text-center align-top">
                               {totalH > 0 ? (
                                 <div
-                                  className="rounded-lg p-1.5 cursor-pointer hover:ring-2 hover:ring-primary/40 hover:shadow-sm transition-all"
+                                  data-dashboard-task-trigger
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-haspopup="dialog"
+                                  onKeyDown={event => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault()
+                                      event.currentTarget.click()
+                                    }
+                                  }}
+                                  className="rounded-lg p-1.5 cursor-pointer hover:ring-2 hover:ring-primary/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-primary transition-all"
                                   style={{ background: cellBg }}
                                   onClick={() => setModal({
                                     titre: `${consultant.code} — ${MOIS[mi]}`,
@@ -429,7 +369,17 @@ function CalendrierView({ affectations, consultants, projets, annee }: {
                               <td key={mois} className="px-1 py-1 text-center align-top">
                                 {totalH > 0 ? (
                                   <div
-                                    className="rounded-lg p-1.5 cursor-pointer hover:ring-2 hover:ring-primary/40 hover:shadow-sm transition-all"
+                                    data-dashboard-task-trigger
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-haspopup="dialog"
+                                    onKeyDown={event => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault()
+                                        event.currentTarget.click()
+                                      }
+                                    }}
+                                    className="rounded-lg p-1.5 cursor-pointer hover:ring-2 hover:ring-primary/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-primary transition-all"
                                     style={{ background: cellBg }}
                                     onClick={() => setModal({
                                       titre: `${projet.nom} — ${MOIS[mi]}`,
@@ -485,7 +435,7 @@ function CalendrierView({ affectations, consultants, projets, annee }: {
                       Total mensuel
                     </span>
                   </td>
-                  {MOIS_KEYS.map((mois, mi) => {
+                  {MOIS_KEYS.map((mois, _mi) => {
                     const total = affFiltered.reduce((s, a) => s + getHeures(a, mois), 0)
                     return (
                       <td key={mois} className="px-2 py-3 text-center">
@@ -520,6 +470,7 @@ function CalendrierView({ affectations, consultants, projets, annee }: {
 
 // ─── Dashboard principal ───────────────────────────────────────
 export default function DashboardPage() {
+  const canAnalytics = useCan("admin:access")
   const { selectedYear, setSelectedYear } = usePlanningYearStore()
   const [kpi, setKpi]                     = useState<KpiData | null>(null)
   const [utilMensuelle, setUtilMensuelle] = useState<UtilMensuelle[]>([])
@@ -531,7 +482,23 @@ export default function DashboardPage() {
   const [loading, setLoading]             = useState(true)
   const annee                             = selectedYear ?? new Date().getFullYear()
   const [loadingAff, setLoadingAff]       = useState(false)
+  const [view, setView]                   = useState<DashboardView>(() => {
+    try {
+      return canAnalytics && localStorage.getItem('dashboard-view') === 'analytics' ? 'analytics' : 'general'
+    } catch {
+      return 'general'
+    }
+  })
   const t = useT()
+
+  const handleViewChange = (next: DashboardView) => {
+    setView(next)
+    try {
+      localStorage.setItem('dashboard-view', next)
+    } catch {
+      /* stockage indisponible (navigation privée) — non bloquant */
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -608,16 +575,28 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:12, fontWeight:600, color:'#6b7280' }}>Année :</span>
-            <YearPicker value={annee} onChange={handleAnneeChange} />
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-full">
-            <Activity size={12} />
-            {loadingAff ? 'Chargement...' : 'Données en temps réel'}
-          </div>
+          {canAnalytics && <DashboardViewToggle value={view} onChange={handleViewChange} />}
+          {view === 'general' && (
+            <>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:12, fontWeight:600, color:'#6b7280' }}>Année :</span>
+                <YearPicker value={annee} onChange={handleAnneeChange} />
+              </div>
+              <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-full">
+                <Activity size={12} />
+                {loadingAff ? 'Chargement...' : 'Données en temps réel'}
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {canAnalytics && <div className="flex justify-end"><PlanningAirflowLauncher year={annee} /></div>}
+
+      {view === 'analytics' ? (
+        <SupersetDashboard />
+      ) : (
+        <>
 
       {/* KPIs — SEIDOR large-number style */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -751,6 +730,9 @@ export default function DashboardPage() {
           annee={annee}
         />
       </div>
+
+        </>
+      )}
 
     </div>
   )

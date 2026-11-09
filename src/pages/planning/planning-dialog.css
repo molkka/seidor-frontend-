@@ -1,0 +1,137 @@
+.planning-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.planning-dialog__header {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.planning-dialog__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.planning-dialog__body > :not(.planning-dialog__form) {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.planning-dialog__form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.planning-dialog__fields {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.5rem;
+}
+
+.planning-dialog__fields--spaced {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.planning-dialog__fields--spaced > * {
+  flex-shrink: 0;
+}
+
+.planning-dialog__fields input,
+.planning-dialog__fields select,
+.planning-dialog__fields textarea,
+.planning-dialog__fields .planning-version-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.planning-dialog__fields .planning-version-card {
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.planning-week-date {
+  flex: 1 1 10rem !important;
+  min-width: 0;
+}
+
+.planning-dialog__actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+  padding: 1rem 1.5rem;
+}
+
+.planning-dialog__actions > button {
+  min-width: 0;
+  justify-content: center;
+  white-space: normal;
+}
+
+@media (max-width: 480px) {
+  .planning-assignment-info {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem !important;
+  }
+
+  .planning-assignment-info > :nth-child(2) {
+    display: none;
+  }
+
+  .planning-dialog__fields {
+    padding: 1rem;
+  }
+
+  .planning-dialog__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.75rem 1rem;
+  }
+
+  .planning-dialog__actions > button {
+    padding: 0.5rem !important;
+    width: 100%;
+  }
+}
+
+@media (max-height: 420px) {
+  .planning-dialog__header {
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+
+  .planning-dialog__actions {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}

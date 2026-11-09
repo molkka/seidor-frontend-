@@ -2,7 +2,8 @@
 @import 'tw-animate-css';
 @import './theme.css';
 
-@custom-variant dark (&:is(.dark *));
+/* A `.light` subtree opts out of dark mode (see theme.css) */
+@custom-variant dark (&:is(.dark *):not(.light *));
 
 @layer base {
   * {
@@ -42,6 +43,19 @@
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;
+}
+
+/* Seidor brand panel: corporate blue with restrained depth (a faint cyan
+   glow echoing the logo's sphere). Built on the brand tokens in theme.css. */
+@utility surface-brand {
+  background-color: var(--brand-navy);
+  background-image:
+    radial-gradient(
+      110% 60% at 100% 0%,
+      color-mix(in oklab, var(--brand-cyan) 22%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(165deg, var(--primary) 0%, var(--brand-navy) 70%);
 }
 
 @utility no-scrollbar {

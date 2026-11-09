@@ -37,7 +37,7 @@ const createSchema = z.object({
   nom: z.string().min(2, { message: 'Minimum 2 caractères.' }),
   email: z.email({ error: 'Email invalide.' }),
   password: z.string().min(8, { message: 'Minimum 8 caractères.' }),
-  role: z.enum(['ADMIN', 'MANAGER']),
+  role: z.enum(['ADMIN', 'CONSULTANT']),
 })
 type CreateValues = z.infer<typeof createSchema>
 
@@ -52,7 +52,7 @@ function CreateUserDialog({
 
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
-    defaultValues: { nom: '', email: '', password: '', role: 'MANAGER' },
+    defaultValues: { nom: '', email: '', password: '', role: 'CONSULTANT' },
   })
 
   async function onSubmit(values: CreateValues) {
@@ -143,7 +143,7 @@ function CreateUserDialog({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value='ADMIN'>ADMIN</SelectItem>
-                      <SelectItem value='MANAGER'>MANAGER</SelectItem>
+                      <SelectItem value='CONSULTANT'>CONSULTANT</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

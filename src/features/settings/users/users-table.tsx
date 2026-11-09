@@ -39,9 +39,7 @@ interface UsersTableProps {
 
 const ROLE_BADGE: Record<string, string> = {
   ADMIN: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  MANAGER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  CONSULTANT:
-    'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  CONSULTANT: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
 }
 
 export function UsersTable({ users, onUpdated }: UsersTableProps) {
@@ -94,7 +92,7 @@ export function UsersTable({ users, onUpdated }: UsersTableProps) {
                       <ShieldAlert
                         size={13}
                         className='text-amber-500'
-                        title={t.protected}
+                        aria-label={t.protected}
                       />
                     )}
                   </div>
@@ -118,7 +116,7 @@ export function UsersTable({ users, onUpdated }: UsersTableProps) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value='ADMIN'>ADMIN</SelectItem>
-                        <SelectItem value='MANAGER'>MANAGER</SelectItem>
+                        <SelectItem value='CONSULTANT'>CONSULTANT</SelectItem>
                       </SelectContent>
                     </Select>
                   )}

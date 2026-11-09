@@ -1,6 +1,14 @@
-import React, { useEffect, useState } from 'react'
-import { Download, RefreshCw, ChevronDown, ChevronRight, Plus, X, Pencil, Search, Calendar } from 'lucide-react'
-import { api } from '@/services/api'
+import { PlanningScenarioCards as VersionCards } from './PlanningScenarioCards'
+import { preferredPlanningVersion } from './planning-scenarios'
+import { Can, PermissionInput } from '@/components/permission'
+import { useSearch } from '@tanstack/react-router'
+import { PlanningOptimizationPanel } from './PlanningOptimizationPanel'
+import { PlanningYearNavigator } from './PlanningYearNavigator'
+import { PlanningModalShell as ModalShell } from './PlanningModalShell'
+import { PlanningEmailDialog } from './PlanningEmailDialog'
+import React, { useEffect, useState, useRef } from 'react'
+import { Download, RefreshCw, ChevronDown, ChevronRight, Plus, X, Pencil, Search, Calendar, Mail } from 'lucide-react'
+import { api, describeApiError } from '@/services/api'
 import { useT } from '@/hooks/useT'
 import { YearPicker } from '@/components/year-picker'
 import { usePlanningYearStore } from '@/store/planningYearStore'
@@ -15,12 +23,13 @@ interface ProjetRow {
   total_heures: number; taux_moyen: number
 }
 interface ConsultantRow {
+  capacite_par_mois?: Record<string, number>; capacity_basis?: string; capacity_unavailable?: boolean
   consultant_id: number; code: string; nom: string
   seniorite: string; division: string; projets: ProjetRow[]
   total_par_mois: Record<string, MoisCell>
   total_heures: number; taux_moyen: number; taux_max: number; surcharge: boolean
 }
-interface Version    { id: number; nom: string; annee: number; est_actuelle: boolean }
+interface Version    { id: number; nom: string; annee: number; est_actuelle: boolean; assignment_count?: number }
 interface Consultant { id: number; code: string; nom_complet: string; statut?: string }
 interface Projet {
   id: number; wbs_code: string; nom: string
@@ -61,66 +70,6 @@ function pctStyle(pct: number): React.CSSProperties {
 const labelStyle: React.CSSProperties = { display:'block', fontSize:12, fontWeight:600, color:'#374151', marginBottom:6 }
 const selectStyle: React.CSSProperties = { width:'100%', padding:'9px 12px', border:'1px solid #d1d5db', borderRadius:9, fontSize:13, color:'#111827', background:'#fff', outline:'none', cursor:'pointer' }
 
-const VERSION_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  'V1.3':    { label:'Optimiste',   color:'#1d4ed8', bg:'#eff6ff', border:'#bfdbfe' },
-  'V1.2':    { label:'Reel',        color:'#15803d', bg:'#f0fdf4', border:'#86efac' },
-  'V1.1':    { label:'Pessimiste',  color:'#b45309', bg:'#fffbeb', border:'#fcd34d' },
-  'Pipeline':{ label:'Pipeline',    color:'#4b5563', bg:'#f9fafb', border:'#d1d5db' },
-}
-
-function versionMeta(nom: string) {
-  for (const key of Object.keys(VERSION_META)) {
-    if (nom.startsWith(key)) return VERSION_META[key]
-  }
-  return { label: nom, color:'#4b5563', bg:'#f9fafb', border:'#d1d5db' }
-}
-
-// ── Version card selector (top-level to avoid focus loss) ─────────────────────
-function VersionCards({ versions, selected, onChange }: {
-  versions: Version[]
-  selected: number | null
-  onChange: (id: number) => void
-}) {
-  if (!versions.length) return null
-  return (
-    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-      {versions.map(v => {
-        const meta    = versionMeta(v.nom)
-        const active  = selected === v.id
-        return (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => onChange(v.id)}
-            style={{
-              display:'flex', flexDirection:'column', alignItems:'flex-start',
-              padding:'10px 14px', borderRadius:10, cursor:'pointer',
-              border:`2px solid ${active ? meta.color : meta.border}`,
-              background: active ? meta.bg : '#fff',
-              boxShadow: active ? `0 0 0 3px ${meta.color}22` : 'none',
-              transition:'all .15s', minWidth:90,
-            }}
-          >
-            <span style={{ fontSize:13, fontWeight:700, color: active ? meta.color : '#374151' }}>{v.nom}</span>
-            <span style={{
-              marginTop:4, fontSize:10, fontWeight:700, letterSpacing:'.05em',
-              textTransform:'uppercase', padding:'2px 7px', borderRadius:4,
-              background: active ? meta.color : meta.border,
-              color: active ? '#fff' : meta.color,
-            }}>
-              {meta.label}
-            </span>
-            {v.est_actuelle && (
-              <span style={{ marginTop:4, fontSize:9, color: meta.color, fontWeight:600 }}>actuelle</span>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Shared hours grid ─────────────────────────────────────────────────────────
 function HoursGrid({ hours, setHours, visibleKeys = MOIS_KEYS }: {
   hours: Record<string,string>
   setHours: (h: Record<string,string>) => void
@@ -135,7 +84,7 @@ function HoursGrid({ hours, setHours, visibleKeys = MOIS_KEYS }: {
           Total : {totalH}h · {Math.round(totalH / visibleKeys.length / 160 * 100)}% moy.
         </span>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
         {visibleKeys.map(key => {
           const i     = MOIS_KEYS.indexOf(key)
           const label = MOIS_LABELS[i]
@@ -149,10 +98,10 @@ function HoursGrid({ hours, setHours, visibleKeys = MOIS_KEYS }: {
             }}>
               <div style={{ fontSize:11, fontWeight:700, color:'#6b7280', marginBottom:6, textTransform:'uppercase', letterSpacing:'.05em' }}>{label}</div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <input type="number" min="0" max="240" step="0.1" value={hours[key]}
+                <PermissionInput permission="planning:write" type="number" min="0" max="240" step="0.1" value={hours[key]}
                   onChange={e => setHours({ ...hours, [key]: e.target.value })}
                   placeholder="0"
-                  style={{ width:'100%', border:'none', background:'transparent', fontSize:16, fontWeight:700, color:'#111827', outline:'none', fontFamily:'monospace' }}
+                  style={{ width:'100%', minWidth:0, border:'none', background:'transparent', fontSize:16, fontWeight:700, color:'#111827', outline:'none', fontFamily:'monospace' }}
                 />
                 <span style={{ fontSize:11, color:'#9ca3af', flexShrink:0 }}>h</span>
               </div>
@@ -174,35 +123,6 @@ function HoursGrid({ hours, setHours, visibleKeys = MOIS_KEYS }: {
           style={{ padding:'4px 12px', borderRadius:6, fontSize:12, fontWeight:600, background:'#fef2f2', color:'#ef4444', border:'none', cursor:'pointer' }}>
           Effacer
         </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Modal shell ───────────────────────────────────────────────────────────────
-function ModalShell({ title, subtitle, icon, onClose, children }: {
-  title: string; subtitle: string; icon: React.ReactNode
-  onClose: () => void; children: React.ReactNode
-}) {
-  return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,.45)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
-      onClick={e => { if (e.target===e.currentTarget) onClose() }}>
-      <div style={{ background:'#fff', borderRadius:20, width:'100%', maxWidth:680, boxShadow:'0 32px 80px rgba(0,0,0,.25)', maxHeight:'92vh', overflowY:'auto' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'1.5rem 1.75rem', borderBottom:'1px solid #f1f5f9' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:'linear-gradient(135deg,#2563eb,#1d4ed8)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              {icon}
-            </div>
-            <div>
-              <div style={{ fontSize:16, fontWeight:700, color:'#111827' }}>{title}</div>
-              <div style={{ fontSize:12, color:'#6b7280', marginTop:1 }}>{subtitle}</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:4, borderRadius:6, display:'flex' }}>
-            <X size={20} />
-          </button>
-        </div>
-        {children}
       </div>
     </div>
   )
@@ -298,7 +218,7 @@ function PeriodBanner({ visibleKeys }: { visibleKeys: string[] }) {
       <div style={{ fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
         {allMonths ? 'Toute l\'année — tous les mois actifs' : 'Période planifiée'}
       </div>
-      <div style={{ display:'flex', gap:4 }}>
+      <div className="grid grid-cols-4 gap-1 sm:grid-cols-12">
         {MOIS_KEYS.map((k, i) => {
           const active = visibleKeys.includes(k)
           return (
@@ -319,143 +239,7 @@ function PeriodBanner({ visibleKeys }: { visibleKeys: string[] }) {
 }
 
 // ── Per-consultant hours table ─────────────────────────────────────────────────
-function ConsultantHoursTable({ consultants, selectedIds, visibleKeys, consultantHours, setConsultantHours }: {
-  consultants: Consultant[]
-  selectedIds: Set<number>
-  visibleKeys: string[]
-  consultantHours: Record<number, Record<string,string>>
-  setConsultantHours: React.Dispatch<React.SetStateAction<Record<number, Record<string,string>>>>
-}) {
-  if (selectedIds.size === 0) return null
-  const selected = consultants.filter(c => selectedIds.has(c.id))
 
-  function fillConsultant(cid: number, h: number) {
-    setConsultantHours(prev => ({
-      ...prev,
-      [cid]: { ...EMPTY_HOURS, ...Object.fromEntries(visibleKeys.map(k => [k, String(h)])) },
-    }))
-  }
-
-  function fillAll(h: number) {
-    setConsultantHours(prev => {
-      const next = { ...prev }
-      for (const cid of selectedIds)
-        next[cid] = { ...EMPTY_HOURS, ...Object.fromEntries(visibleKeys.map(k => [k, String(h)])) }
-      return next
-    })
-  }
-
-  return (
-    <div style={{ marginBottom:20 }}>
-      <PeriodBanner visibleKeys={visibleKeys} />
-
-      {/* En-tête mois */}
-      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6, paddingLeft:184 }}>
-        {visibleKeys.map(k => (
-          <div key={k} style={{ width:64, textAlign:'center', fontSize:10, fontWeight:700,
-            color:'#2563eb', textTransform:'uppercase', letterSpacing:'.05em' }}>
-            {MOIS_LABELS[MOIS_KEYS.indexOf(k)]}
-          </div>
-        ))}
-        <div style={{ width:58, textAlign:'center', fontSize:10, fontWeight:700, color:'#374151' }}>Total</div>
-      </div>
-
-      {/* Lignes consultant */}
-      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-        {selected.map(c => {
-          const cHours = consultantHours[c.id] ?? EMPTY_HOURS
-          const total = visibleKeys.reduce((s, k) => s + (Number(cHours[k]) || 0), 0)
-          return (
-            <div key={c.id} style={{
-              background:'#fafbff', borderRadius:12, border:'1px solid #e8eef8',
-              padding:'10px 12px', display:'flex', alignItems:'center', gap:6, flexWrap:'nowrap',
-            }}>
-              {/* Badge + nom */}
-              <div style={{ width:178, display:'flex', alignItems:'center', gap:7, flexShrink:0 }}>
-                <span style={{
-                  minWidth:40, padding:'3px 6px', borderRadius:6, background:'#eff6ff',
-                  fontFamily:'monospace', fontWeight:700, fontSize:11, color:'#1d4ed8',
-                  textAlign:'center', flexShrink:0,
-                }}>
-                  {c.code}
-                </span>
-                <span style={{ fontSize:12, fontWeight:500, color:'#111827', overflow:'hidden',
-                  textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {c.nom_complet}
-                </span>
-              </div>
-
-              {/* Inputs mois actifs */}
-              {visibleKeys.map(k => {
-                const val = Number(cHours[k]) || 0
-                const pct = val / 160
-                const borderColor = val > 160 ? '#fca5a5' : val > 0 ? '#86efac' : '#dde5f8'
-                const bg = val > 160 ? '#fff5f5' : val > 0 ? '#f0fdf4' : '#fff'
-                return (
-                  <div key={k} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, flexShrink:0 }}>
-                    <input
-                      type="number" min="0" max="240" step="0.1"
-                      value={cHours[k]} placeholder="0"
-                      onChange={e => setConsultantHours(prev => ({
-                        ...prev,
-                        [c.id]: { ...(prev[c.id] ?? EMPTY_HOURS), [k]: e.target.value },
-                      }))}
-                      style={{
-                        width:60, height:38, borderRadius:8, border:`1.5px solid ${borderColor}`,
-                        background:bg, textAlign:'center', fontSize:15, fontWeight:700,
-                        fontFamily:'monospace', outline:'none',
-                        color: val > 160 ? '#dc2626' : '#111827',
-                      }}
-                    />
-                    <div style={{ width:54, height:3, background:'#e5e7eb', borderRadius:2 }}>
-                      <div style={{
-                        width:`${Math.min(pct * 100, 100)}%`, height:3, borderRadius:2,
-                        background: val > 160 ? '#ef4444' : val > 0 ? '#22c55e' : 'transparent',
-                      }} />
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* Total */}
-              <div style={{ width:58, textAlign:'center', flexShrink:0 }}>
-                <span style={{ fontWeight:800, fontFamily:'monospace', fontSize:14,
-                  color: total > 0 ? '#2563eb' : '#9ca3af' }}>
-                  {total}h
-                </span>
-              </div>
-
-              {/* Quick-fill ligne */}
-              <div style={{ display:'flex', gap:3, marginLeft:'auto', flexShrink:0 }}>
-                {[40,80,120,160].map(h => (
-                  <button key={h} type="button" onClick={() => fillConsultant(c.id, h)}
-                    style={{
-                      padding:'4px 7px', borderRadius:6, fontSize:10, fontWeight:600,
-                      background:'#f1f5f9', color:'#374151', border:'1px solid #e5e7eb', cursor:'pointer',
-                    }}>
-                    {h}h
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Quick-fill global */}
-      <div style={{ display:'flex', gap:8, marginTop:10, alignItems:'center' }}>
-        <span style={{ fontSize:11, color:'#9ca3af', flexShrink:0 }}>Appliquer à tous :</span>
-        {[40,80,120,160].map(h => (
-          <button key={h} type="button" onClick={() => fillAll(h)}
-            style={{ padding:'5px 14px', borderRadius:7, fontSize:12, fontWeight:700,
-              background:'#2563eb', color:'#fff', border:'none', cursor:'pointer' }}>
-            {h}h
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 // ── Inline Week Editor ────────────────────────────────────────────────────────
 function InlineWeekEditor({ affectationId, annee, onSaved }: {
@@ -530,10 +314,10 @@ function InlineWeekEditor({ affectationId, annee, onSaved }: {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:12, fontWeight:600, color:'#374151', background:'#fff', border:'1px solid #e5e7eb', padding:'2px 10px', borderRadius:6 }}>{m.total_heures.toFixed(1)}h</span>
                 {[40, 80, 160].map(h => (
-                  <button key={h} type="button" onClick={e => { e.stopPropagation(); fillMonth(mi, h) }}
+                  <Can permission="planning:write"><button key={h} type="button" onClick={e => { e.stopPropagation(); fillMonth(mi, h) }}
                     style={{ fontSize:10, fontWeight:600, padding:'2px 7px', borderRadius:4, border:'1px solid #e5e7eb', cursor:'pointer', background:'#f9fafb', color:'#374151' }}>
                     {h}h
-                  </button>
+                  </button></Can>
                 ))}
                 {openMonths.has(m.mois) ? <ChevronDown size={14} color="#6b7280"/> : <ChevronRight size={14} color="#6b7280"/>}
               </div>
@@ -546,13 +330,13 @@ function InlineWeekEditor({ affectationId, annee, onSaved }: {
                     <span style={{ fontSize:11, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
                     <div style={{ display:'flex', gap:3, flexShrink:0 }}>
                       {[0, 8, 16, 40].map(h => (
-                        <button key={h} type="button" onClick={() => updateWeek(mi, si, String(h))}
+                        <Can permission="planning:write"><button key={h} type="button" onClick={() => updateWeek(mi, si, String(h))}
                           style={{ fontSize:10, fontWeight:600, padding:'2px 5px', borderRadius:4, border:'1px solid #e5e7eb', cursor:'pointer', background: s.heures === h ? NAVY : '#f9fafb', color: s.heures === h ? '#fff' : '#374151' }}>
                           {h}h
-                        </button>
+                        </button></Can>
                       ))}
                     </div>
-                    <input type="number" min={0} step={0.5} value={s.heures || ''} onChange={e => updateWeek(mi, si, e.target.value)} placeholder="0"
+                    <PermissionInput permission="planning:write" type="number" min={0} step={0.5} value={s.heures || ''} onChange={e => updateWeek(mi, si, e.target.value)} placeholder="0"
                       style={{ width:52, padding:'4px 7px', fontSize:13, fontWeight:600, border:`1.5px solid ${NAVY}40`, borderRadius:7, outline:'none', textAlign:'right', fontFamily:'monospace', flexShrink:0 }} />
                     <span style={{ fontSize:11, color:'#9ca3af' }}>h</span>
                   </div>
@@ -563,12 +347,12 @@ function InlineWeekEditor({ affectationId, annee, onSaved }: {
         ))}
       </div>
       <div style={{ display:'flex', justifyContent:'flex-end', marginTop:10 }}>
-        <button type="button" onClick={handleSave} disabled={saving}
+        <Can permission="planning:write"><button type="button" onClick={handleSave} disabled={saving}
           style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 22px', borderRadius:100, background:'#162B6E', color:'#fff', border:'none', cursor:saving?'not-allowed':'pointer', opacity:saving?0.65:1, fontSize:13, fontWeight:700, boxShadow:'0 4px 14px rgba(22,43,110,.25)', transition:'all .18s' }}
           onMouseEnter={e => { if (!saving) e.currentTarget.style.background='#1E3A8A' }}
           onMouseLeave={e => { e.currentTarget.style.background='#162B6E' }}>
           {saving ? 'Enregistrement…' : 'Enregistrer les semaines'}
-        </button>
+        </button></Can>
       </div>
     </div>
   )
@@ -613,9 +397,9 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const fetchYearVersions = (y: number) => {
     api.get(`/planning/versions?annee=${y}`)
       .then(r => {
-        const vlist: Version[] = r.data
+        const vlist: Version[] = r.data.filter((v: Version) => !v.nom.startsWith('Pipeline'))
         setYearVersions(vlist)
-        const def = vlist.find(v => v.est_actuelle) ?? vlist[0]
+        const def = preferredPlanningVersion(vlist)
         setVersionId(def?.id ?? null)
       })
       .catch(() => {})
@@ -710,7 +494,8 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
   return (
     <ModalShell title="Nouvelle planification" subtitle="Affecter des consultants à un projet" icon={<Plus size={18} color="#fff"/>} onClose={onClose}>
-      <form onSubmit={handleSubmit} style={{ padding:'1.5rem 1.75rem', display:'flex', flexDirection:'column', gap:18 }}>
+      <form onSubmit={handleSubmit} className="planning-dialog__form">
+      <div className="planning-dialog__fields planning-dialog__fields--spaced" data-planning-fields>
 
         {/* ── ① Consultants ──────────────────────────────────── */}
         <div>
@@ -757,7 +542,7 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
         {/* ── ③ Année + Version ──────────────────────────────── */}
         <div>
-          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:12 }}>
             <label style={{ ...labelStyle, marginBottom:0 }}>③ Année *</label>
             <YearPicker value={annee} onChange={handleYearChange} />
           </div>
@@ -797,7 +582,7 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               Aucune semaine disponible pour {annee}. Vérifiez la configuration du calendrier.
             </div>
           ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:380, overflowY:'auto' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {selectedIds.size > 1 && (
                 <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#92400e', flexShrink:0 }}>
                   Ces heures seront appliquées aux {selectedIds.size} consultants sélectionnés.
@@ -829,10 +614,10 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                       <div style={{ display:'flex', alignItems:'center', gap:5 }}>
                         <div style={{ display:'flex', gap:3 }} onClick={e => e.stopPropagation()}>
                           {[40, 80, 160].map(h => (
-                            <button key={h} type="button" onClick={() => { fillMonth(realIdx, h); setOpenMonths(prev => new Set([...prev, m.mois])) }}
+                            <Can permission="planning:write"><button key={h} type="button" onClick={() => { fillMonth(realIdx, h); setOpenMonths(prev => new Set([...prev, m.mois])) }}
                               style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, border:`1px solid ${NAVY}30`, cursor:'pointer', background:'#fff', color:NAVY }}>
                               {h}h
-                            </button>
+                            </button></Can>
                           ))}
                         </div>
                         {isOpen ? <ChevronDown size={14} color="#6b7280"/> : <ChevronRight size={14} color="#6b7280"/>}
@@ -842,21 +627,21 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                     {isOpen && (
                       <div style={{ borderTop:'1px solid #f3f4f6' }}>
                         {m.semaines.map((s, si) => (
-                          <div key={s.iso_week} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 14px', borderBottom: si < m.semaines.length-1 ? '1px solid #f9fafb' : 'none', background:'#fff' }}>
+                          <div key={s.iso_week} style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:8, padding:'7px 14px', borderBottom: si < m.semaines.length-1 ? '1px solid #f9fafb' : 'none', background:'#fff' }}>
                             <span style={{ fontSize:11, fontWeight:700, color:'#6b7280', fontFamily:'monospace', width:26, flexShrink:0 }}>S{s.iso_week}</span>
-                            <span style={{ fontSize:10, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
+                            <span className="planning-week-date" style={{ fontSize:10, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
                             {s.heures_dispo !== undefined && (
                               <span style={{ fontSize:9, color:'#d1d5db', fontFamily:'monospace', flexShrink:0 }}>/{s.heures_dispo}h</span>
                             )}
                             <div style={{ display:'flex', gap:3, flexShrink:0 }}>
                               {[0,8,16,40].map(h => (
-                                <button key={h} type="button" onClick={() => updateWeek(realIdx, si, String(h))}
+                                <Can permission="planning:write"><button key={h} type="button" onClick={() => updateWeek(realIdx, si, String(h))}
                                   style={{ fontSize:10, fontWeight:600, padding:'2px 5px', borderRadius:4, border:'1px solid #e5e7eb', cursor:'pointer', background: s.heures===h ? NAVY : '#f9fafb', color: s.heures===h ? '#fff' : '#374151' }}>
                                   {h}h
-                                </button>
+                                </button></Can>
                               ))}
                             </div>
-                            <input
+                            <PermissionInput permission="planning:write"
                               type="number" min={0} step={0.5} value={s.heures||''} placeholder="0"
                               onChange={e => updateWeek(realIdx, si, e.target.value)}
                               style={{ width:52, padding:'4px 7px', fontSize:13, fontWeight:600, border:`1.5px solid ${NAVY}40`, borderRadius:7, outline:'none', textAlign:'right', fontFamily:'monospace', flexShrink:0 }}
@@ -893,7 +678,8 @@ function NewPlanModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           </div>
         )}
 
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', paddingTop:8, borderTop:'1px solid #f1f5f9' }}>
+        </div>
+        <div className="planning-dialog__actions">
           <button type="button" onClick={onClose}
             style={{ padding:'9px 20px', borderRadius:100, fontSize:13, fontWeight:500, background:'#F5F6F8', color:'#5A6472', border:'1px solid #E0E4E8', cursor:'pointer' }}>
             Annuler
@@ -990,9 +776,10 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
       icon={<Pencil size={16} color="#fff"/>}
       onClose={onClose}
     >
-      <form onSubmit={handleSubmit} style={{ padding:'1.5rem 1.75rem' }}>
+      <form onSubmit={handleSubmit} className="planning-dialog__form">
+      <div className="planning-dialog__fields" data-planning-fields>
         {/* Consultant / Project info */}
-        <div style={{ background:'#f8faff', border:'1px solid #e0eaff', borderRadius:10, padding:'12px 16px', marginBottom:16, display:'flex', gap:20 }}>
+        <div className="planning-assignment-info" style={{ background:'#f8faff', border:'1px solid #e0eaff', borderRadius:10, padding:'12px 16px', marginBottom:16, display:'flex', gap:20 }}>
           <div>
             <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.05em' }}>Consultant</div>
             <div style={{ fontSize:13, fontWeight:700, color:'#1e3a6e', marginTop:2 }}>[{target.code}] {target.nom}</div>
@@ -1044,7 +831,7 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
                 Aucune semaine disponible pour {annee}
               </div>
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:380, overflowY:'auto' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {weekData.map((m, mi) => (
                   <div key={m.mois} style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' }}>
                     <div
@@ -1068,12 +855,12 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
                     {openMonths.has(m.mois) && (
                       <div style={{ borderTop:'1px solid #f3f4f6' }}>
                         {m.semaines.map((s, si) => (
-                          <div key={s.iso_week} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 14px', borderBottom: si < m.semaines.length-1 ? '1px solid #f9fafb' : 'none' }}>
+                          <div key={s.iso_week} style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:8, padding:'7px 14px', borderBottom: si < m.semaines.length-1 ? '1px solid #f9fafb' : 'none' }}>
                             <span style={{ fontSize:11, fontWeight:700, color:'#6b7280', fontFamily:'monospace', width:26, flexShrink:0 }}>S{s.iso_week}</span>
-                            <span style={{ fontSize:11, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
+                            <span className="planning-week-date" style={{ fontSize:11, color:'#9ca3af', flex:1 }}>{s.date_debut} → {s.date_fin}</span>
                             <div style={{ display:'flex', gap:3, flexShrink:0 }}>
                               {[0, 8, 16, 40].map(h => (
-                                <button
+                                <Can permission="planning:write"><button
                                   key={h} type="button" onClick={() => updateWeek(mi, si, String(h))}
                                   style={{
                                     fontSize:10, fontWeight:600, padding:'2px 5px', borderRadius:4,
@@ -1081,10 +868,10 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
                                     background: s.heures === h ? NAVY : '#f9fafb',
                                     color: s.heures === h ? '#fff' : '#374151',
                                   }}
-                                >{h}h</button>
+                                >{h}h</button></Can>
                               ))}
                             </div>
-                            <input
+                            <PermissionInput permission="planning:write"
                               type="number" min={0} step={0.5}
                               value={s.heures || ''}
                               onChange={e => updateWeek(mi, si, e.target.value)}
@@ -1112,7 +899,8 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
             <X size={14}/> {error}
           </div>
         )}
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', paddingTop:8, borderTop:'1px solid #f1f5f9' }}>
+        </div>
+        <div className="planning-dialog__actions">
           <button type="button" onClick={onClose}
             style={{ padding:'9px 20px', borderRadius:100, fontSize:13, fontWeight:500, background:'#F5F6F8', color:'#5A6472', border:'1px solid #E0E4E8', cursor:'pointer' }}>
             Annuler
@@ -1131,6 +919,7 @@ function EditPlanModal({ target, versionId, annee, onClose, onSaved }: {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PlanningPage() {
+  const routeSearch = useSearch({ from: '/_authenticated/planning/' })
   const { selectedYear, setSelectedYear } = usePlanningYearStore()
   const t = useT().planning
   const [data,         setData]         = useState<ConsultantRow[]>([])
@@ -1139,47 +928,86 @@ export default function PlanningPage() {
   const [toolbarYear,  setToolbarYear]  = useState<number>(selectedYear ?? new Date().getFullYear())
   const [versionId,    setVersionId]    = useState<number | null>(null)
   const [loading,      setLoading]      = useState(true)
+  const [dataError,    setDataError]    = useState('')
   const [filterDiv,    setFilterDiv]    = useState('ALL')
   const [search,       setSearch]       = useState('')
   const [display,      setDisplay]      = useState<DisplayMode>('pct')
   const [expanded,              setExpanded]              = useState<Set<number>>(new Set())
   const [expandedProjectWeeks, setExpandedProjectWeeks] = useState<Set<number>>(new Set())
   const [showNew,      setShowNew]      = useState(false)
+  const [emailVersion, setEmailVersion] = useState<Version | null>(null)
   const [editTarget,   setEditTarget]   = useState<EditTarget | null>(null)
   const [projetsAll,   setProjetsAll]   = useState<Projet[]>([])
   const [consultants,  setConsultants]  = useState<Consultant[]>([])
+  const yearRequest = useRef(0)
+  const dataRequest = useRef(0)
 
   useEffect(() => {
+    const initialRequest = yearRequest.current
     api.get('/projets').then(r => setProjetsAll(r.data)).catch(() => {})
     api.get('/consultants').then(r => setConsultants(r.data)).catch(() => {})
     api.get('/planning/versions').then(r => {
-      const vers: Version[] = r.data
+      if (initialRequest !== yearRequest.current) return
+      const vers: Version[] = r.data.filter((v: Version) => !v.nom.startsWith('Pipeline'))
       setVersions(vers)
       // Respect the year chosen on the year-selection screen; fall back to est_actuelle
-      const targetYear = selectedYear
+      const targetYear = routeSearch.year ?? selectedYear
         ?? vers.find(v => v.est_actuelle)?.annee
         ?? vers[0]?.annee
       if (!targetYear) return
+      if (targetYear !== selectedYear) setSelectedYear(targetYear)
       setToolbarYear(targetYear)
       const versForYear = vers.filter(v => v.annee === targetYear)
       setToolbarVers(versForYear)
-      const def = versForYear.find(v => v.est_actuelle) ?? versForYear[0]
+      const def = preferredPlanningVersion(versForYear, routeSearch.version_id)
       if (def) setVersionId(def.id)
     }).catch(() => {})
   }, [])
 
   function handleToolbarYearChange(y: number) {
+    if (y < 2025 || y > 2100) return
+    const request = ++yearRequest.current
+    ++dataRequest.current
     setToolbarYear(y)
     setSelectedYear(y)
+    setVersionId(null)
+    setToolbarVers([])
+    setData([])
+    setExpanded(new Set())
+    setExpandedProjectWeeks(new Set())
+    setLoading(true)
     api.get(`/planning/versions?annee=${y}`).then(r => {
-      const vlist: Version[] = r.data
+      if (request !== yearRequest.current) return
+      const vlist: Version[] = r.data.filter((v: Version) => !v.nom.startsWith('Pipeline'))
       setVersions(prev => {
         const ids = new Set(prev.map(v => v.id))
         return [...prev, ...vlist.filter(v => !ids.has(v.id))]
       })
       setToolbarVers(vlist)
-      const def = vlist.find(v => v.est_actuelle) ?? vlist[0]
-      if (def) setVersionId(def.id)
+      const def = preferredPlanningVersion(vlist)
+      setVersionId(def?.id ?? null)
+      if (!def) setLoading(false)
+    }).catch(() => {
+      if (request === yearRequest.current) setLoading(false)
+    })
+  }
+
+  function handleOptimizedCreated(version: Version) {
+    const request = ++yearRequest.current
+    ++dataRequest.current
+    setData([])
+    setSearch('')
+    setFilterDiv('ALL')
+    setVersions(previous => [...previous.filter(v => v.id !== version.id), version])
+    setToolbarYear(version.annee)
+    setSelectedYear(version.annee)
+    setToolbarVers([version])
+    setVersionId(version.id)
+    api.get(`/planning/versions?annee=${version.annee}`).then(response => {
+      if (request !== yearRequest.current) return
+      const list: Version[] = response.data.filter((v: Version) => !v.nom.startsWith('Pipeline'))
+      setToolbarVers(list)
+      setVersions(previous => [...previous.filter(v => v.annee !== version.annee), ...list])
     }).catch(() => {})
   }
 
@@ -1199,15 +1027,44 @@ export default function PlanningPage() {
 
   const fetchData = () => {
     if (!versionId) return
+    const request = ++dataRequest.current
     setLoading(true)
+    setDataError('')
     setExpandedProjectWeeks(new Set())
     api.get(`/planning/detail-par-consultant?version_id=${versionId}`)
-      .then(r => setData(r.data))
-      .catch(() => setData([]))
-      .finally(() => setLoading(false))
+      .then(r => { if (request === dataRequest.current) setData(r.data) })
+      .catch(err => { if (request === dataRequest.current) { setData([]); setDataError(describeApiError(err, 'Impossible de charger ce planning.')) } })
+      .finally(() => { if (request === dataRequest.current) setLoading(false) })
   }
 
   useEffect(() => { fetchData() }, [versionId])
+
+  async function handleScenarioChange(id: number) {
+    const request = ++yearRequest.current
+    ++dataRequest.current
+    setSearch('')
+    setFilterDiv('ALL')
+    setExpanded(new Set())
+    setExpandedProjectWeeks(new Set())
+    setData([])
+    setLoading(true)
+    setDataError('')
+    try {
+      const response = await api.get(`/planning/versions?annee=${toolbarYear}`)
+      if (request !== yearRequest.current) return
+      const list: Version[] = response.data.filter((v: Version) => !v.nom.startsWith('Pipeline'))
+      setToolbarVers(list)
+      setVersions(previous => [...previous.filter(v => v.annee !== toolbarYear), ...list])
+      const resolved = preferredPlanningVersion(list, id)
+      if (!resolved) { setLoading(false); return }
+      if (resolved.id === versionId) fetchData()
+      else setVersionId(resolved.id)
+    } catch (err) {
+      if (request !== yearRequest.current) return
+      setDataError(describeApiError(err, 'Impossible de charger les versions.'))
+      setLoading(false)
+    }
+  }
 
   const toggleExpand = (id: number) =>
     setExpanded(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n })
@@ -1306,12 +1163,17 @@ export default function PlanningPage() {
               onMouseEnter={e => e.currentTarget.style.background='#E0E4E8'}
               onMouseLeave={e => e.currentTarget.style.background='#F5F6F8'}
             ><Download size={14}/>{t.download}</button>
-            <button
+            <Can permission="planning:write"><button
+              type="button" disabled={!currentVersion || loading}
+              onClick={() => { if (currentVersion) setEmailVersion(currentVersion) }}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-primary disabled:opacity-50"
+            ><Mail size={15}/>Envoyer au CTO</button></Can>
+            <Can permission="planning:write"><button
               onClick={() => setShowNew(true)}
               style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 22px', borderRadius:100, background:'#162B6E', color:'#fff', border:'none', cursor:'pointer', fontSize:13, fontWeight:700, boxShadow:'0 4px 16px rgba(22,43,110,.25)', transition:'all .18s' }}
               onMouseEnter={e => e.currentTarget.style.background='#1E3A8A'}
               onMouseLeave={e => e.currentTarget.style.background='#162B6E'}
-            ><Plus size={15}/>{t.addProject}</button>
+            ><Plus size={15}/>{t.addProject}</button></Can>
           </div>
         </div>
 
@@ -1319,11 +1181,14 @@ export default function PlanningPage() {
         <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:12, fontWeight:600, color:'#6b7280' }}>Année :</span>
-            <YearPicker value={toolbarYear} onChange={handleToolbarYearChange} />
+            <PlanningYearNavigator value={toolbarYear} onChange={handleToolbarYearChange} />
           </div>
-          <VersionCards versions={toolbarVers} selected={versionId} onChange={setVersionId} />
+          <VersionCards versions={toolbarVers} selected={versionId} onChange={handleScenarioChange} />
         </div>
       </div>
+
+      <PlanningOptimizationPanel sourceVersion={currentVersion} projects={projetsAll} onCreated={handleOptimizedCreated} />
+      {dataError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{dataError}</p>}
 
       {/* ── KPIs ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1349,7 +1214,7 @@ export default function PlanningPage() {
           </div>
         ))}
         <div style={{ marginLeft:'auto', fontSize:12, color:'#9aa3b8' }}>
-          Basé sur <strong>160h</strong>/mois · Cliquez sur un consultant pour voir ses projets
+          {data[0]?.capacity_basis === 'calendar' ? 'Basé sur le calendrier et les disponibilités · Sans capacité : pourcentage non défini' : 'Basé sur 160h/mois'} · Cliquez sur un consultant pour voir ses projets
         </div>
       </div>
 
@@ -1414,10 +1279,11 @@ export default function PlanningPage() {
                         {MOIS_LABELS.map(label => {
                           const cell = c.total_par_mois[label]??{heures:0,pct:0}
                           const val  = display==='pct'?cell.pct:cell.heures
+                          const noCapacity = c.capacity_basis === 'calendar' && c.capacite_par_mois?.[label] === 0 && cell.heures > 0
                           return (
                             <td key={label} style={{ padding:'6px 4px', textAlign:'center' }}>
-                              <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:60, height:26, borderRadius:7, ...pctStyle(cell.pct), fontFamily:'monospace', fontSize:12, fontWeight:700 }}>
-                                {val===0?'—':display==='pct'?`${val}%`:`${val}h`}
+                              <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:60, height:26, borderRadius:7, ...pctStyle(noCapacity ? 101 : cell.pct), fontFamily:'monospace', fontSize:12, fontWeight:700 }} title={noCapacity ? 'Travail affecté sans capacité disponible' : undefined}>
+                                {noCapacity && display === 'pct' ? 'N/D' : val===0?'—':display==='pct'?`${val}%`:`${val}h`}
                               </span>
                             </td>
                           )
@@ -1426,7 +1292,7 @@ export default function PlanningPage() {
                           <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:60, height:26, borderRadius:7, background:'#eef2fb', color:'#162255', fontFamily:'monospace', fontSize:12, fontWeight:700 }}>{c.total_heures}h</span>
                         </td>
                         <td style={{ padding:'8px 12px', textAlign:'center' }}>
-                          <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:54, height:26, borderRadius:7, ...pctStyle(c.taux_moyen), fontFamily:'monospace', fontSize:12, fontWeight:700 }}>{c.taux_moyen}%</span>
+                          <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:54, height:26, borderRadius:7, ...pctStyle(c.taux_moyen), fontFamily:'monospace', fontSize:12, fontWeight:700 }}>{c.capacity_unavailable ? 'N/D' : `${c.taux_moyen}%`}</span>
                         </td>
                         <td />
                       </tr>
@@ -1464,7 +1330,7 @@ export default function PlanningPage() {
                             {/* Edit + Calendar buttons */}
                             <td style={{ padding:'5px 12px', textAlign:'center' }}>
                               <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
-                                <button
+                                <Can permission="planning:write"><button
                                   onClick={e => {
                                     e.stopPropagation()
                                     const proj = projetsAll.find(x => x.id === p.projet_id)
@@ -1476,7 +1342,7 @@ export default function PlanningPage() {
                                   title="Modifier les heures"
                                 >
                                   <Pencil size={13}/>
-                                </button>
+                                </button></Can>
                                 <button
                                   onClick={e => { e.stopPropagation(); toggleProjectWeeks(p.affectation_id) }}
                                   style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:8, background: expandedProjectWeeks.has(p.affectation_id) ? '#162B6E' : '#f0f5ff', border:`1px solid ${expandedProjectWeeks.has(p.affectation_id) ? '#162B6E' : '#c7d7fd'}`, color: expandedProjectWeeks.has(p.affectation_id) ? '#fff' : '#4f6ef7', cursor:'pointer', transition:'all .15s' }}
@@ -1536,6 +1402,7 @@ export default function PlanningPage() {
       </div>
 
       {/* ── Modals ─────────────────────────────────────────────── */}
+      {emailVersion && <PlanningEmailDialog version={emailVersion} onClose={() => setEmailVersion(null)} />}
       {showNew && (
         <NewPlanModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); fetchData() }} />
       )}

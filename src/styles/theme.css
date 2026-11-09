@@ -1,5 +1,14 @@
-:root {
+/* `.light` re-declares the light palette on a subtree, so a surface whose
+   assets only work on white (e.g. the auth page and its logo) stays light
+   even when the app is in dark mode. */
+:root,
+.light {
   --radius: 0.5rem;
+
+  /* ── SEIDOR identity (sampled from the official logo) ── */
+  --brand-navy:         oklch(0.31 0.128 261.7); /* #04286E wordmark navy      */
+  --brand-blue:         oklch(0.49 0.212 266.8); /* #2A4CD4 sphere core        */
+  --brand-cyan:         oklch(0.72 0.162 240.4); /* #14AFFF sphere highlight   */
 
   /* ── Base ─────────────────────────────────────────────── */
   --background:         oklch(0.97 0.004 247);   /* #F5F6F8 light gray page bg  */
@@ -85,6 +94,10 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --color-brand-navy:           var(--brand-navy);
+  --color-brand-blue:           var(--brand-blue);
+  --color-brand-cyan:           var(--brand-cyan);
 
   --color-background:           var(--background);
   --color-foreground:           var(--foreground);
