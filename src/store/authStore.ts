@@ -23,8 +23,8 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
+  persist<AuthState>(
+    (set, get) => ({
       token: null,
       user: null,
       setAuth: (token, user) => set({ token, user }),
@@ -36,8 +36,8 @@ export const useAuthStore = create<AuthState>()(
         usePlanningYearStore.getState().clearYear()
         set({ token: null, user: null })
       },
-      logout: async () => {
-        const token = useAuthStore.getState().token
+      logout: async (): Promise<boolean> => {
+        const token = get().token
         let revoked = false
         try {
           const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:8000'}/auth/logout`, {
@@ -45,7 +45,7 @@ export const useAuthStore = create<AuthState>()(
           })
           revoked = response.ok || response.status === 401
         } catch { /* Local access is cleared even if the server cannot be reached. */ }
-        useAuthStore.getState().clearSession()
+        get().clearSession()
         return revoked
       },
     }),
